@@ -45,6 +45,16 @@ Execution Engine
 
 ## 快速开始
 
+### 首次试用清单（约 3 分钟）
+
+1. **环境**：`pip install -e .`（可选：venv、`cp .env.example .env`，见 [docs/dev_prerequisites.md](docs/dev_prerequisites.md)）。
+2. **前置检查**：`python scripts/check_dev_prerequisites.py`。
+3. **主路径**：`python cli.py demo NVDA --mock`，可见研究结论、策略生成、回测结果、交易总结四块。
+4. **可选**：`python cli.py research NVDA --mock` 查看 Contract JSON。
+5. **可选**：OpenClaw 最快验证见下方「OpenClaw 最快验证」。
+
+### 命令示例
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
@@ -76,6 +86,18 @@ python cli.py demo NVDA --llm
 | **backtest** | `python cli.py backtest [SYMBOL] [--start] [--end] [--mock] [--llm]` | Research → 回测 → Store，打印指标 |
 | **paper** | `python cli.py paper [--symbol SYMBOL] [--once] [--mock] [--llm]` | Research → Contract → Paper 注入；Kill Switch：STOP_PAPER / .paper_stop |
 
+### OpenClaw 最快验证
+
+无需打开集成文档即可完成一次 OpenClaw 风格调用：
+
+```bash
+python cli.py research NVDA --mock
+# 或：python scripts/run_for_openclaw.py research NVDA --mock
+```
+
+- **输出**：stdout 为单条 JSON（含 `task`、`symbol`、`contract_action`、`contract_confidence`、`thesis_snippet`、`raw_contract` 等）。完整字段与 backtest/demo 报告见 [docs/openclaw_integration.md](docs/openclaw_integration.md)。
+- **验证**：退出码 0 即成功；可 pipe 到 `jq` 或 Python 解析。Skill 调用方式与报告格式见 openclaw_integration。
+
 ## 脚本用法（兼容 / 高级）
 
 前置：环境与依赖见 [docs/dev_prerequisites.md](docs/dev_prerequisites.md)；可选 `.env` 中 `OPENAI_API_KEY` 或 `KIMI_CODE_API_KEY`。上述 CLI 子命令与下列脚本对应，可按需选用。
@@ -103,6 +125,7 @@ python cli.py demo NVDA --llm
 | 文档 | 说明 |
 |------|------|
 | [docs/README.md](docs/README.md) | **文档索引**（必读/规范/产品与上线分类） |
+| [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md) | **当前状态总表**：能跑通什么、mock、过渡层 vs 长期、下一步替换 |
 | [docs/restructuring_plan.md](docs/restructuring_plan.md) | 重构总纲、目标架构、5 阶段实施 |
 | [docs/architecture.md](docs/architecture.md) | 系统分层、模块、数据流、Tech Stack |
 | [docs/decision_contract.md](docs/decision_contract.md) | DecisionContract 规范 |

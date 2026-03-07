@@ -13,6 +13,7 @@
 
 | 文档 | 用途 |
 |------|------|
+| [CURRENT_STATE.md](CURRENT_STATE.md) | **当前状态总表**：能跑通什么、哪些 mock、过渡层 vs 长期保留、下一步替换/补齐（2 分钟速览） |
 | [restructuring_plan.md](restructuring_plan.md) | **总纲**：重构目标、目标架构图、目录结构、现有模块处理、5 阶段实施、经验闭环与风险 |
 | [architecture.md](architecture.md) | **架构**：分层原则、当前/目标模块、数据流、Tech Stack、与 StrategySpec/Experience/Live 的衔接 |
 | [mvp_plan.md](mvp_plan.md) | **节奏**：8 周 MVP 任务与交付、Post-MVP 与重构 Phase 1–5 的对应关系 |

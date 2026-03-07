@@ -42,6 +42,7 @@
 
 ## 三、相关文档
 
+- **当前状态总表**（能跑通什么、mock、过渡层 vs 长期保留、下一步替换）：[CURRENT_STATE.md](CURRENT_STATE.md)；过渡 vs 长期以 CURRENT_STATE 为准。
 - MVP 与实盘前工作：[mvp_plan.md](mvp_plan.md)、[live_readiness_checklist.md](live_readiness_checklist.md)
 - 实盘前检查项：[live_readiness_checklist.md](live_readiness_checklist.md)
 - 开发前准备：[dev_prerequisites.md](dev_prerequisites.md)
