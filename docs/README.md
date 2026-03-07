@@ -28,6 +28,8 @@
 | [decision_contract.md](decision_contract.md) | DecisionContract 用途、核心/扩展字段、Agent 职责、规则映射、回测与评估 |
 | [strategy_spec.md](strategy_spec.md) | StrategySpec 定义：可复现策略规则，由 Strategy Bridge 产出并编译进 NautilusTrader |
 | [experience_schema.md](experience_schema.md) | Experience Store 表结构：strategy_run、backtest_result、trade_experience、experience_summary |
+| [result_schema.md](result_schema.md) | **统一结果模型**：CLI/OpenClaw 核心字段对齐、status/reason 约定（no_trade、wait_confirmation） |
+| [next_phase_interface.md](next_phase_interface.md) | **下一阶段接口**：Experience 写入口（write_run_result）、TradingAgents 预留说明 |
 
 ---
 
@@ -39,6 +41,8 @@
 | [live_readiness_checklist.md](live_readiness_checklist.md) | **实盘前工作清单**：7 项必过检查（回测稳定性、OOS、交易次数、回撤、Paper、风控、券商连通性）及补齐任务 L1–L7 |
 | [mock_vs_real.md](mock_vs_real.md) | 各模块 Mock vs 真实实现对照，及替换优先级（Research/数据源/IBKR/风控） |
 | [openclaw_integration.md](openclaw_integration.md) | **交互形态**：通过 OpenClaw Agent 交互；CLI 与 OpenClaw Skill 打通。触发方式与报告格式（run_for_openclaw、JSON 报告） |
+| [AI_Trading_System_User_Journey.md](AI_Trading_System_User_Journey.md) | **User Journey 与用例**：角色、UC-01～08、完整旅程、系统分层；与项目现状对齐见 [local/user_journey_alignment.md](local/user_journey_alignment.md)（本地） |
+| [AI_Trading_System_Agent_Loop_and_Interaction.md](AI_Trading_System_Agent_Loop_and_Interaction.md) | **系统交互与 Agent 循环**：五层交互、Agent Loop、Experience Store、OpenClaw；与项目现状对齐见 [local/agent_loop_alignment.md](local/agent_loop_alignment.md)（本地） |
 | [scheduling.md](scheduling.md) | 研究任务自动运行（cron、run_scheduled、REPORT_DIR 与环境变量） |
 | [deferred_authorization.md](deferred_authorization.md) | **实盘与生产对接清单**：IB Gateway、LLM API 已支持；IBKR/OpenClaw/生产密钥配置与步骤（与实盘前工作配合） |
 

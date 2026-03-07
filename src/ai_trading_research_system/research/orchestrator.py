@@ -18,6 +18,7 @@ from ai_trading_research_system.research.agents.synthesis_agent import Synthesis
 from ai_trading_research_system.research.agents.llm_agent import LLMResearchAgent
 
 class ResearchOrchestrator:
+    # TODO(phase): TradingAgents 真接入时可通过 adapter 注入 graph，替代当前 agents 列表；见 docs/next_phase_interface.md
     def __init__(
         self,
         data_provider: MockDataProvider | YFinanceProvider | None = None,

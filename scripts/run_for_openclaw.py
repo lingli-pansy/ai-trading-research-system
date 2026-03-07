@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-OpenClaw-callable entry: run research or research+backtest and print a JSON report to stdout.
+OpenClaw-callable entry: run research / backtest / demo and print a single JSON report to stdout.
 Usage:
   python scripts/run_for_openclaw.py research SYMBOL [--mock] [--llm]
   python scripts/run_for_openclaw.py backtest SYMBOL [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--mock] [--llm]
-Output: single JSON object (report) to stdout; errors to stderr and non-zero exit.
+  python scripts/run_for_openclaw.py demo SYMBOL [--mock] [--llm]
+Output: single JSON object to stdout only; errors to stderr as JSON line + non-zero exit.
+Error format (stderr): {"ok": false, "command": "research", "error_code": 1, "error_message": "..."}
 """
 from __future__ import annotations
 
@@ -15,12 +17,22 @@ import sys
 from ai_trading_research_system.pipeline.openclaw_adapter import (
     run_research_report,
     run_backtest_report,
+    run_demo_report,
 )
 
 
+def _err_json(command: str, error_code: int, error_message: str) -> str:
+    return json.dumps({
+        "ok": False,
+        "command": command,
+        "error_code": error_code,
+        "error_message": error_message,
+    }, ensure_ascii=False)
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="OpenClaw: run research or backtest, output JSON report")
-    parser.add_argument("task", choices=["research", "backtest"], help="Task: research or backtest")
+    parser = argparse.ArgumentParser(description="OpenClaw: run research/backtest/demo, output JSON to stdout")
+    parser.add_argument("task", choices=["research", "backtest", "demo"], help="Task: research, backtest, or demo")
     parser.add_argument("symbol", nargs="?", default="NVDA", help="Symbol (default: NVDA)")
     parser.add_argument("--start", default=None, help="Backtest start YYYY-MM-DD")
     parser.add_argument("--end", default=None, help="Backtest end YYYY-MM-DD")
@@ -31,7 +43,7 @@ def main() -> int:
     try:
         if args.task == "research":
             report = run_research_report(args.symbol, use_mock=args.mock, use_llm=args.llm)
-        else:
+        elif args.task == "backtest":
             report = run_backtest_report(
                 args.symbol,
                 start_date=args.start,
@@ -39,10 +51,12 @@ def main() -> int:
                 use_mock=args.mock,
                 use_llm=args.llm,
             )
+        else:
+            report = run_demo_report(args.symbol, use_mock=args.mock, use_llm=args.llm)
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        print(_err_json(args.task, 1, str(e)), file=sys.stderr)
         return 1
 
 

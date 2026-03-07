@@ -19,6 +19,9 @@ class ResearchReport:
     contract_confidence: str
     thesis_snippet: str
     raw_contract: dict[str, Any]
+    engine_type: str = "nautilus"
+    status: str = "ok"
+    reason: str = ""
 
 
 @dataclass
@@ -37,6 +40,10 @@ class BacktestReport:
     trade_count: int
     strategy_run_id: int
     raw_contract: dict[str, Any]
+    engine_type: str = "nautilus"
+    used_nautilus: bool = True
+    status: str = "ok"  # "ok" | "no_trade"
+    reason: str = ""   # e.g. "wait_confirmation"
 
 
 def _json_safe_contract_dump(contract: Any) -> dict[str, Any]:
@@ -67,6 +74,9 @@ def run_research_report(
         contract_confidence=contract.confidence,
         thesis_snippet=(contract.thesis or "")[:200],
         raw_contract=dump,
+        engine_type="nautilus",
+        status="ok",
+        reason="",
     )
     return asdict(report)
 
@@ -90,6 +100,8 @@ def run_backtest_report(
         use_llm=use_llm,
     )
     dump = _json_safe_contract_dump(result.contract)
+    status = "no_trade" if result.metrics.trade_count == 0 else "ok"
+    reason = "wait_confirmation" if result.metrics.trade_count == 0 else ""
     report = BacktestReport(
         task="backtest",
         symbol=symbol,
@@ -104,6 +116,10 @@ def run_backtest_report(
         trade_count=result.metrics.trade_count,
         strategy_run_id=result.strategy_run_id,
         raw_contract=dump,
+        engine_type="nautilus",
+        used_nautilus=True,
+        status=status,
+        reason=reason,
     )
     return asdict(report)
 
@@ -122,10 +138,16 @@ def run_demo_report(
     contract = result.contract
     signal = ContractTranslator().translate(contract)
     dump = _json_safe_contract_dump(contract)
+    status = "no_trade" if result.metrics.trade_count == 0 else "ok"
+    reason = "wait_confirmation" if result.metrics.trade_count == 0 else ""
     return {
         "task": "demo",
         "symbol": symbol,
         "completed_at": datetime.utcnow().isoformat() + "Z",
+        "engine_type": "nautilus",
+        "used_nautilus": True,
+        "status": status,
+        "reason": reason,
         "research": {
             "thesis": (contract.thesis or "")[:400],
             "key_drivers": contract.key_drivers,

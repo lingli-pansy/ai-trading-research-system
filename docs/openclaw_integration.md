@@ -92,16 +92,37 @@ python cli.py research [SYMBOL] [--mock] [--llm]
 python cli.py backtest [SYMBOL] [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--mock] [--llm]
 python cli.py demo [SYMBOL] [--mock] [--llm]
 
-# 或沿用 run_for_openclaw（JSON 到 stdout，与 adapter 报告格式一致）
+# 或沿用 run_for_openclaw（仅 stdout 输出结果 JSON，与 adapter 报告格式一致）
 python scripts/run_for_openclaw.py research [SYMBOL] [--mock] [--llm]
 python scripts/run_for_openclaw.py backtest [SYMBOL] [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--mock] [--llm]
+python scripts/run_for_openclaw.py demo [SYMBOL] [--mock] [--llm]
 ```
 
 - **SYMBOL**：默认 `NVDA`。
 - **--mock**：使用 mock 研究数据。
 - **--llm**：使用 LLM Agent（需配置 `OPENAI_API_KEY` 或 `KIMI_CODE_API_KEY`）。
-- 成功时：退出码 0，报告 JSON 打印到 stdout。
-- 失败时：退出码 1，错误信息到 stderr。
+- **成功时**：退出码 0，**仅 stdout** 输出单条报告 JSON；日志与调试信息不写入 stdout，便于管道解析。
+- **失败时**：退出码非 0，**仅 stderr** 输出一行错误 JSON，格式如下。
+
+**错误格式（stderr 单行 JSON）**：
+
+```json
+{"ok": false, "command": "research", "error_code": 1, "error_message": "..."}
+```
+
+| 字段 | 说明 |
+|------|------|
+| ok | 固定 false |
+| command | 本次请求的 task：research / backtest / demo |
+| error_code | 非 0 退出码（通常 1） |
+| error_message | 异常信息摘要 |
+
+**最小验证示例**（仅验证 stdout 为合法 JSON）：
+
+```bash
+python scripts/run_for_openclaw.py research NVDA --mock
+# 期望：退出码 0，stdout 为单条 JSON；可 pipe 到 jq 或 python -c "import sys,json; json.load(sys.stdin)"
+```
 
 ### LLM 与 OpenClaw 模型对应
 

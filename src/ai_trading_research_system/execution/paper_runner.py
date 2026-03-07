@@ -118,45 +118,44 @@ class PaperRunner:
 
     def _run_once_legacy(self, price: float, daily_pnl_pct: float | None) -> PaperRunnerResult:
         """Legacy path: PaperTradingEngine (use_nautilus=False)."""
+        def _legacy_result(
+            signal_action: str = "",
+            size_fraction: float = 0.0,
+            order_done: bool = False,
+            order_result: PaperOrderResult | None = None,
+            message: str = "",
+        ) -> PaperRunnerResult:
+            return PaperRunnerResult(
+                symbol=self.symbol,
+                signal_action=signal_action,
+                size_fraction=size_fraction,
+                order_done=order_done,
+                order_result=order_result,
+                message=message,
+                trade_count=1 if order_done else 0,
+                pnl=0.0,
+                status="ok" if order_done else "no_trade",
+                reason=message if not order_done else "",
+                used_nautilus=False,
+            )
+
         if self._engine is None:
-            return PaperRunnerResult(
-                symbol=self.symbol,
-                signal_action="",
-                size_fraction=0.0,
-                order_done=False,
-                message="Legacy engine not initialized",
-            )
+            return _legacy_result(message="Legacy engine not initialized")
         if not self._started:
-            return PaperRunnerResult(
-                symbol=self.symbol,
-                signal_action="",
-                size_fraction=0.0,
-                order_done=False,
-                message="Runner not started",
-            )
+            return _legacy_result(message="Runner not started")
         signal = self._signal
         if signal is None:
-            return PaperRunnerResult(
-                symbol=self.symbol,
-                signal_action="",
-                size_fraction=0.0,
-                order_done=False,
-                message="No signal injected",
-            )
+            return _legacy_result(message="No signal injected")
         if signal.action != "paper_buy" or signal.allowed_position_size <= 0:
-            return PaperRunnerResult(
-                symbol=self.symbol,
+            return _legacy_result(
                 signal_action=signal.action,
                 size_fraction=signal.allowed_position_size,
-                order_done=False,
                 message=f"Signal does not allow buy: {signal.rationale}",
             )
         if price <= 0:
-            return PaperRunnerResult(
-                symbol=self.symbol,
+            return _legacy_result(
                 signal_action=signal.action,
                 size_fraction=signal.allowed_position_size,
-                order_done=False,
                 message="Invalid price",
             )
         if not _check_position_limit(
@@ -166,19 +165,15 @@ class PaperRunner:
             signal.allowed_position_size,
             self._max_position_pct,
         ):
-            return PaperRunnerResult(
-                symbol=self.symbol,
+            return _legacy_result(
                 signal_action=signal.action,
                 size_fraction=signal.allowed_position_size,
-                order_done=False,
                 message="Position limit exceeded",
             )
         if not _check_daily_stop(daily_pnl_pct, self._daily_stop_loss_pct):
-            return PaperRunnerResult(
-                symbol=self.symbol,
+            return _legacy_result(
                 signal_action=signal.action,
                 size_fraction=signal.allowed_position_size,
-                order_done=False,
                 message="Daily stop loss triggered",
             )
         try:
@@ -187,8 +182,7 @@ class PaperRunner:
                 price=price,
                 size_fraction=signal.allowed_position_size,
             )
-            return PaperRunnerResult(
-                symbol=self.symbol,
+            return _legacy_result(
                 signal_action=signal.action,
                 size_fraction=signal.allowed_position_size,
                 order_done=result.status == "filled",
@@ -196,10 +190,8 @@ class PaperRunner:
                 message=result.status,
             )
         except Exception as e:
-            return PaperRunnerResult(
-                symbol=self.symbol,
+            return _legacy_result(
                 signal_action=signal.action,
                 size_fraction=signal.allowed_position_size,
-                order_done=False,
                 message=str(e),
             )

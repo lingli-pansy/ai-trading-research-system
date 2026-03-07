@@ -13,6 +13,8 @@ def _metrics_to_result(
     signal: AISignal,
     metrics: BacktestMetrics,
 ) -> PaperRunnerResult:
+    status = "no_trade" if metrics.trade_count == 0 else "ok"
+    reason = "wait_confirmation" if metrics.trade_count == 0 else ""
     return PaperRunnerResult(
         symbol=symbol,
         signal_action=signal.action,
@@ -20,6 +22,11 @@ def _metrics_to_result(
         order_done=metrics.trade_count > 0,
         order_result=None,
         message=f"nautilus paper: trades={metrics.trade_count} pnl={metrics.pnl:.2f} sharpe={metrics.sharpe:.4f}",
+        trade_count=metrics.trade_count,
+        pnl=metrics.pnl,
+        status=status,
+        reason=reason,
+        used_nautilus=True,
     )
 
 
@@ -62,6 +69,9 @@ class NautilusPaperRunner:
                 size_fraction=0.0,
                 order_done=False,
                 message="Runner not started",
+                status="no_trade",
+                reason="runner_not_started",
+                used_nautilus=True,
             )
         signal = self._signal
         if signal is None:
@@ -71,6 +81,9 @@ class NautilusPaperRunner:
                 size_fraction=0.0,
                 order_done=False,
                 message="No signal injected",
+                status="no_trade",
+                reason="no_signal",
+                used_nautilus=True,
             )
         metrics = run_paper_simulation(
             self.symbol,

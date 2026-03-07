@@ -9,7 +9,7 @@
 - **最短一条命令**：`python cli.py demo NVDA`（或 `--mock` 免网络），可看到研究结论、策略生成、回测结果、交易总结四块。见 [README 快速开始](../README.md)、[dev_prerequisites.md](dev_prerequisites.md)。
 - **Research**：`python cli.py research [SYMBOL] [--mock] [--llm]`，输出 DecisionContract JSON。
 - **Backtest**：`python cli.py backtest [SYMBOL] [--start] [--end] [--mock] [--llm]`，Research → 回测 → Experience Store，打印指标。
-- **Paper**：`python cli.py paper [--symbol SYMBOL] [--once] [--mock] [--llm]`，Research → Contract → 默认由 NautilusTrader 短窗口回测执行（与 backtest 同一套策略）；或配置 IBKR_* 后走 TWS。
+- **Paper**：`python cli.py paper [--symbol SYMBOL] [--once] [--mock] [--llm]`，Research → Contract → **默认 Nautilus 短窗口回测**（与 backtest 同一套策略）；本仓 Paper 引擎仅在使用方显式 use_nautilus=False 时保留（过渡层）。或配置 IBKR_* 后走 TWS。
 - **OpenClaw 调用**：`python cli.py research NVDA --mock` 或 `python scripts/run_for_openclaw.py research NVDA --mock`，stdout 单条 JSON 报告；Skill 可调用 cli 或 control 层 API，见 [openclaw_integration.md](openclaw_integration.md)。
 - **E2E 检查**：`python scripts/run_e2e_check.py NVDA --mock`，校验 Pipeline 与 Experience Store 有数据。
 - **调度**：`python scripts/run_scheduled.py [--once]`，报告落盘至 REPORT_DIR。

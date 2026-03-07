@@ -21,7 +21,7 @@
 | └ SynthesisAgent | 实逻辑 | 规则为真，输入可为真实聚合结果 |
 | **research/orchestrator** | 实 | 支持 use_mock、use_llm；数据源与 Agent 组合可配置 |
 | **Contract → 信号** | 实 | ContractTranslator、decision/rules.py，无 mock |
-| **回测 / Experience / Paper 执行路径** | 实 | 历史 yfinance、Nautilus、Store、本仓 Paper 均为实；信号来自 Contract |
+| **回测 / Experience / Paper 执行路径** | 实 | 历史 yfinance、Nautilus、Store；**Paper 默认 Nautilus 短窗口回测**，本仓 Paper 引擎为过渡层（显式 opt-in） |
 | **OpenClaw / 调度** | 实 | run_for_openclaw、openclaw_adapter 报告 JSON；run_scheduled 自动运行与落盘 |
 | **IBKR / LLM** | 已支持 | 配置 TWS/IB Gateway 与 IBKR_*、OPENAI_API_KEY 或 KIMI_CODE_API_KEY 即可；实盘/生产步骤见 [deferred_authorization.md](deferred_authorization.md) |
 

@@ -49,9 +49,9 @@ Execution Engine
 
 1. **环境**：`pip install -e .`（可选：venv、`cp .env.example .env`，见 [docs/dev_prerequisites.md](docs/dev_prerequisites.md)）。
 2. **前置检查**：`python scripts/check_dev_prerequisites.py`。
-3. **Demo**：`python cli.py demo NVDA --mock`，可见研究结论、策略生成、回测结果、交易总结四块。
-4. **E2E 校验**：`python scripts/run_e2e_check.py NVDA --mock`，校验 Pipeline 与 Experience Store 有数据。
-5. **OpenClaw 调用示例**：`python cli.py research NVDA --mock`（或 `python scripts/run_for_openclaw.py research NVDA --mock`）。完整报告格式见 [docs/openclaw_integration.md](docs/openclaw_integration.md)。
+3. **Demo**：`python cli.py demo NVDA --mock`，可见四块：研究结论、策略生成、回测结果、交易总结；输出中会标明「执行引擎: NautilusTrader」。
+4. **E2E 校验**：`python scripts/run_e2e_check.py NVDA --mock`，校验 Pipeline 跑通且 Experience Store 有写入。
+5. **OpenClaw 调用示例**：`python cli.py research NVDA --mock` 或 `python scripts/run_for_openclaw.py research NVDA --mock`，stdout 为单条 JSON；完整报告与错误格式见 [docs/openclaw_integration.md](docs/openclaw_integration.md)。
 
 **可选**：`python cli.py research NVDA --mock` 查看 Contract JSON；使用真实数据或 LLM 见下方命令示例。
 
@@ -86,7 +86,7 @@ python cli.py demo NVDA --llm
 | **demo** | `python cli.py demo [SYMBOL] [--mock] [--llm]` | E2E：研究 → 策略 → 回测 → 总结（四块） |
 | **research** | `python cli.py research [SYMBOL] [--mock] [--llm]` | Research → 输出 Contract JSON |
 | **backtest** | `python cli.py backtest [SYMBOL] [--start] [--end] [--mock] [--llm]` | Research → 回测 → Store，打印指标 |
-| **paper** | `python cli.py paper [--symbol SYMBOL] [--once] [--mock] [--llm]` | Research → Contract → Paper 注入；Kill Switch：STOP_PAPER / .paper_stop |
+| **paper** | `python cli.py paper [--symbol SYMBOL] [--once] [--mock] [--llm]` | Research → Contract → **默认 Nautilus 短窗口回测**；Kill Switch：STOP_PAPER / .paper_stop |
 
 ### OpenClaw 最快验证
 

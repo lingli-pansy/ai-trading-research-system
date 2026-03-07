@@ -181,6 +181,7 @@ def cmd_demo(symbol: str, mock: bool, llm: bool) -> int:
     print("=" * 60)
     print("【4】交易总结")
     print("=" * 60)
+    print("执行引擎: NautilusTrader（回测 + Paper 默认主线）。")
     print(f"本轮研究+回测已写入 Experience Store，strategy_run_id={run_id}。")
     print(f"结论: {contract.suggested_action}（置信度 {contract.confidence}），策略信号 {signal.action}，回测 {metrics.trade_count} 笔，pnl={metrics.pnl:.2f}。")
     return 0

@@ -1,5 +1,6 @@
 """
 Backtest pipeline: Research → Contract → Translator → BacktestRunner → Experience Store.
+统一通过 experience/writer.write_run_result 写入，并落库 StrategySpec 快照。
 """
 from __future__ import annotations
 
@@ -8,8 +9,9 @@ from dataclasses import dataclass
 from ai_trading_research_system.research.orchestrator import ResearchOrchestrator
 from ai_trading_research_system.research.schemas import DecisionContract
 from ai_trading_research_system.strategy.translator import ContractTranslator
+from ai_trading_research_system.strategy.spec_snapshot import contract_to_spec_snapshot
 from ai_trading_research_system.backtest.runner import run_backtest, BacktestMetrics
-from ai_trading_research_system.experience.store import write_backtest_result
+from ai_trading_research_system.experience.writer import write_run_result, RunResultPayload
 
 
 @dataclass
@@ -29,6 +31,7 @@ def run(
 ) -> BacktestPipeResult:
     """
     Run Research → Contract → Translator → BacktestRunner → Store.
+    Writes via write_run_result with strategy_spec_snapshot in parameters.
     Returns contract, backtest metrics, and strategy_run id from store.
     """
     start = start_date or _default_start()
@@ -37,12 +40,19 @@ def run(
     contract = orchestrator.run(symbol)
     signal = ContractTranslator().translate(contract)
     metrics = run_backtest(symbol=symbol, signal=signal, start_date=start, end_date=end)
-    run_id = write_backtest_result(
+    spec_snapshot = contract_to_spec_snapshot(contract, metrics)
+    payload = RunResultPayload(
         symbol=symbol,
         start_date=start,
         end_date=end,
-        metrics=metrics,
+        sharpe=metrics.sharpe,
+        max_drawdown=metrics.max_drawdown,
+        win_rate=metrics.win_rate,
+        pnl=metrics.pnl,
+        trade_count=metrics.trade_count,
+        extra={"strategy_spec_snapshot": spec_snapshot},
     )
+    run_id = write_run_result(payload)
     return BacktestPipeResult(contract=contract, metrics=metrics, strategy_run_id=run_id)
 
 

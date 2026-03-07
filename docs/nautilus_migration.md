@@ -87,7 +87,15 @@
 
 ---
 
-## 5. 参考
+## 5. 默认行为说明（Migration note）
+
+- **默认主线**：所有与 Paper 相关的入口（CLI `paper`、`run_paper.py`）均**默认 use_nautilus=True**，即由 NautilusTrader 短窗口回测执行；无需配置即可走 Nautilus。
+- **过渡路径**：本仓 PaperTradingEngine 仅在**显式传入 use_nautilus=False** 时使用（代码层 opt-in），无 silent fallback；文档与日志中标注为 fallback / legacy，后续将废弃。
+- **一致性**：README、CURRENT_STATE、mock_vs_real、本文档均以「默认 Nautilus、本仓引擎为过渡层」表述一致。
+
+---
+
+## 6. 参考
 
 - [CURRENT_STATE.md](CURRENT_STATE.md) — 当前状态与下一步优先级（P2 方案 A）
 - [restructuring_plan.md](restructuring_plan.md) — NautilusTrader + 经验闭环、Phase 3–5
