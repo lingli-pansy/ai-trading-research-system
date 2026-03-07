@@ -122,6 +122,24 @@ MVP 视为完成需满足：
 
 ------------------------------------------------------------------------
 
+# Phase 2 — Interactive Research System（评审 Phase 2）
+
+**目标**：用户可通过一句命令运行系统；最终交互形态通过 OpenClaw Agent，CLI 与 OpenClaw Skill 打通。
+
+**完成标志**：新用户 clone 后执行 `python cli.py demo NVDA` 即可看到：研究结论、策略生成、回测结果、交易总结。
+
+**当前状态**：已达成。
+
+| 项 | 交付物 |
+|----|--------|
+| 统一 CLI | 项目根 `cli.py`，子命令 research / backtest / paper / demo |
+| E2E demo | `python cli.py demo NVDA` 输出四块可读摘要 |
+| OpenClaw / Skill 打通 | control 层（command_router、skill_interface）、[openclaw_integration.md](openclaw_integration.md) 中 Skill 调用方式（CLI 或 Python API） |
+
+与 [restructuring_plan.md](restructuring_plan.md) 中的 Phase 2（TradingAgents Fork）区分：本处为「可交互入口」阶段，不包含 TradingAgents 替换。
+
+------------------------------------------------------------------------
+
 # 实盘前工作（Pre-Live）
 
 MVP 5 条已达成后，进入实盘前需完成以下工作，以 [live_readiness_checklist.md](live_readiness_checklist.md) 为验收清单。

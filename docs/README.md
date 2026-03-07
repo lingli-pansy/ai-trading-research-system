@@ -2,9 +2,9 @@
 
 开发前建议按以下顺序阅读，便于直接进入开发阶段。
 
-**MVP 已达成**；实盘前工作见 [live_readiness_checklist.md](live_readiness_checklist.md)。  
+**MVP 已达成**；**Phase 2（Interactive Research System）** 已达成，与架构评审意见对齐见 [architecture_review_alignment.md](architecture_review_alignment.md)。实盘前工作见 [live_readiness_checklist.md](live_readiness_checklist.md)。  
 **开发前准备**：权限、数据、IBKR Paper 等 → 见 [dev_prerequisites.md](dev_prerequisites.md)。  
-**脚本用法**：见仓库根 [README.md](../README.md#脚本用法research--回测--paper--联调)。
+**脚本用法**：见仓库根 [README.md](../README.md#统一-cliphase-2-推荐入口)。
 
 ---
 
@@ -33,11 +33,13 @@
 | 文档 | 用途 |
 |------|------|
 | [PRD.md](PRD.md) | 产品定位、目标用户、核心能力、MVP 范围、成功指标、未来扩展（与重构对齐） |
-| [live_readiness_checklist.md](live_readiness_checklist.md) | **实盘前工作清单**：7 项必过检查（回测稳定性、OOS、交易次数、回撤、Paper、风控、券商连通性）及补齐任务 L1–L7 |
+| [architecture_review_alignment.md](architecture_review_alignment.md) | **架构评审对齐**：评审意见与当前交付逐项对应、Phase 2 与实盘前关系 |
+| [live_readiness_checklist.md](live_readiness_checklist.md) | **实盘前工作清单**：7 项必过检查（回测稳定性、OOS、交易次数、回撤、Paper、风控、券商连通性）及补齐任务 L1–L7；与评审 Phase 2 之后、P4–P6 一致 |
 | [mock_vs_real.md](mock_vs_real.md) | 各模块 Mock vs 真实实现对照，及替换优先级（Research/数据源/IBKR/风控） |
-| [openclaw_integration.md](openclaw_integration.md) | OpenClaw 触发方式与报告格式（run_for_openclaw、JSON 报告） |
+| [openclaw_integration.md](openclaw_integration.md) | **交互形态**：通过 OpenClaw Agent 交互；CLI 与 OpenClaw Skill 打通。触发方式与报告格式（run_for_openclaw、JSON 报告） |
 | [scheduling.md](scheduling.md) | 研究任务自动运行（cron、run_scheduled、REPORT_DIR 与环境变量） |
 | [deferred_authorization.md](deferred_authorization.md) | **授权就绪后对接清单**：IBKR Paper、OpenClaw 服务端、生产密钥、风控（与实盘前工作配合） |
+| [archive_20260307.md](archive_20260307.md) | **REFLECT 归档**：2026-03-07 阶段摘要、关键决策、当前状态与接续点 |
 
 ---
 

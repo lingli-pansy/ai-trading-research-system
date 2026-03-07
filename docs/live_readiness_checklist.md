@@ -2,7 +2,9 @@
 
 策略进入实盘前必须通过本清单全部检查项。对应重构方案 Phase 5，见 [restructuring_plan.md](restructuring_plan.md#5-分阶段实施)。
 
-**与 MVP 的关系**：MVP 5 条完成标准已达成；本清单为 **MVP 之后、实盘之前** 的必过工作，逐项完成并验收后方可进入实盘或 IBKR Live 验证。
+**与架构评审的关系**：依据《ARCHITECTURE_REVIEW_AND_ACTIONS》等评审意见，**Phase 2（Interactive Research System）** 已达成（统一 CLI、E2E demo、OpenClaw/Skill 打通）。本清单为 **Phase 2 之后、实盘之前** 的必过工作，与评审中的 P4–P6（StrategySpec compiler、NautilusTrader adapter、Experience store）及重构方案 Phase 5 实盘就绪一致，逐项完成并验收后方可进入实盘或 IBKR Live 验证。
+
+**与 MVP 的关系**：MVP 5 条完成标准已达成；本清单为 **MVP 之后、实盘之前** 的必过工作。
 
 ---
 

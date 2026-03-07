@@ -106,3 +106,48 @@ def run_backtest_report(
         raw_contract=dump,
     )
     return asdict(report)
+
+
+def run_demo_report(
+    symbol: str,
+    *,
+    use_mock: bool = False,
+    use_llm: bool = False,
+) -> dict[str, Any]:
+    """Run E2E demo (research → strategy → backtest → store); return report dict with four blocks for Skill/OpenClaw."""
+    from ai_trading_research_system.pipeline.backtest_pipe import run as run_pipe
+    from ai_trading_research_system.strategy.translator import ContractTranslator
+
+    result = run_pipe(symbol=symbol, start_date=None, end_date=None, use_mock=use_mock, use_llm=use_llm)
+    contract = result.contract
+    signal = ContractTranslator().translate(contract)
+    dump = _json_safe_contract_dump(contract)
+    return {
+        "task": "demo",
+        "symbol": symbol,
+        "completed_at": datetime.utcnow().isoformat() + "Z",
+        "research": {
+            "thesis": (contract.thesis or "")[:400],
+            "key_drivers": contract.key_drivers,
+            "confidence": contract.confidence,
+            "suggested_action": contract.suggested_action,
+            "time_horizon": contract.time_horizon,
+            "raw_contract": dump,
+        },
+        "strategy": {
+            "action": signal.action,
+            "allowed_position_size": signal.allowed_position_size,
+            "rationale": signal.rationale,
+        },
+        "backtest": {
+            "sharpe": result.metrics.sharpe,
+            "max_drawdown": result.metrics.max_drawdown,
+            "win_rate": result.metrics.win_rate,
+            "pnl": result.metrics.pnl,
+            "trade_count": result.metrics.trade_count,
+        },
+        "summary": {
+            "strategy_run_id": result.strategy_run_id,
+            "sentence": f"结论: {contract.suggested_action}（置信度 {contract.confidence}），策略信号 {signal.action}，回测 {result.metrics.trade_count} 笔，pnl={result.metrics.pnl:.2f}。",
+        },
+    }

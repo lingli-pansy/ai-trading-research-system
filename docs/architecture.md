@@ -118,7 +118,10 @@ Experience Injector → 下一轮 Research
 
 ### OpenClaw Control Plane
 
-系统入口。负责：启动与调度、用户交互、通知。不负责：交易逻辑、研究分析、下单执行。
+系统入口。**最终交互形态**：用户通过 **OpenClaw Agent**（聊天/命令）与系统交互；本仓不直接面向用户为「主入口」，而是作为 Agent 背后的执行层。
+
+- **职责**：启动与调度、用户交互、通知。不负责：交易逻辑、研究分析、下单执行。
+- **CLI 与 Skill 打通**：本仓提供统一 CLI（如 `cli.py`），与 OpenClaw **Skill** 对齐——Skill 调用 CLI 或与 CLI 共用同一命令/接口，使 Agent 能执行 research、backtest、paper、demo 等能力；CLI 设计需保证与 Skill 的入参/出参一致。
 
 ------------------------------------------------------------------------
 

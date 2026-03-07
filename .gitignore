@@ -54,4 +54,4 @@ htmlcov/
 *~
 
 # --- 项目本地配置（若含路径/密钥则忽略）---
-# .memoryhub_root
+.memoryhub_root

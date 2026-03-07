@@ -2,7 +2,67 @@
 
 本文说明如何通过 OpenClaw 触发研究或研究+回测任务，以及报告格式。
 
-**若 OpenClaw 已安装到本地**：可直接在 OpenClaw 中配置「执行命令」为本仓库的 `run_for_openclaw.py`（或 `run_scheduled.py`），传入 symbol、task 等参数，从 stdout 或 REPORT_DIR 获取 JSON 报告。IB Gateway 已启动时，后续可对接实盘/Paper 下单（当前仍为本仓 Paper 管道）。
+---
+
+## 交互形态与 Skill 打通
+
+**最终交互形态**：用户通过 **OpenClaw Agent**（聊天或命令）与系统交互，而非直接执行本仓脚本。例如用户说「analyse NVDA」「run backtest」「show experience」，由 OpenClaw Agent 理解意图并驱动本系统执行。
+
+**CLI 与 Skill 打通**：本仓提供统一 CLI 入口（如 `cli.py` 或等价命令），与 **OpenClaw Skill** 对齐：
+
+- **Skill** 作为 OpenClaw 侧的能力封装，通过调用本仓 CLI（或与 CLI 共用同一套命令/接口）执行 research、backtest、paper、demo 等；
+- CLI 设计时需保证：命令形式、参数、stdout/报告格式与 OpenClaw Skill 的入参/出参一致，便于 Agent 调用 Skill 即完成一次完整能力调用；
+- 这样既保留本地「一条命令跑通」的体验，又保证 OpenClaw Agent 通过 Skill 获得同一套能力。
+
+**若 OpenClaw 已安装到本地**：可在 OpenClaw 中配置 Skill 调用本仓库的 CLI（或当前过渡方案：`run_for_openclaw.py` / `run_scheduled.py`），传入 symbol、task 等参数，从 stdout 或 REPORT_DIR 获取 JSON 报告。IB Gateway 已启动时，后续可对接实盘/Paper 下单（当前仍为本仓 Paper 管道）。
+
+---
+
+## Skill 调用方式（与 CLI 打通）
+
+OpenClaw Skill 可通过两种方式调用本仓，入参/出参与 CLI 及现有报告格式一致：
+
+**方式 A：子进程调用统一 CLI（推荐）**
+
+在 Skill 中执行项目根目录下的 `cli.py`，子命令与参数与本地使用一致：
+
+```bash
+python cli.py research NVDA [--mock] [--llm]
+python cli.py backtest NVDA [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--mock] [--llm]
+python cli.py demo NVDA [--mock] [--llm]
+python cli.py paper [--symbol NVDA] [--once] [--mock] [--llm]
+```
+
+- `research`：stdout 为 DecisionContract JSON；若 Skill 需要与 `run_for_openclaw.py` 相同的报告结构，可改用方式 B 或调用 `run_research_report()`。
+- `backtest` / `demo`：若需机器可读的 JSON，建议用方式 B；否则可直接解析 CLI 的 stdout 文本。
+
+**方式 B：Python API（control 层 / pipeline）**
+
+Skill 通过 HTTP 或本地调用本仓 Python API 时，可使用 control 层「意图路由 + 执行」或直接使用 pipeline 的 adapter：
+
+```python
+from ai_trading_research_system.control import route_intent, execute
+
+# 用户说 "analyse NVDA" 或 "run backtest AAPL"
+cmd = route_intent("analyse NVDA", use_mock=False, use_llm=False)
+result = execute(cmd, as_json=True)  # dict，与 run_for_openclaw 报告格式兼容
+# result 即 research/backtest/demo 的 JSON 报告，可回传 OpenClaw 或 Agent
+```
+
+或直接调用 pipeline adapter（与 `run_for_openclaw.py` 一致）：
+
+```python
+from ai_trading_research_system.pipeline.openclaw_adapter import (
+    run_research_report,
+    run_backtest_report,
+    run_demo_report,
+)
+report = run_research_report("NVDA", use_mock=False, use_llm=False)
+report = run_backtest_report("NVDA", start_date="2024-01-01", end_date="2024-06-01")
+report = run_demo_report("NVDA", use_mock=False, use_llm=False)  # 含 research/strategy/backtest/summary 四块
+```
+
+入参（symbol、task、--mock/--llm 等）与出参（上述报告格式）与本文档「报告格式」及 `run_for_openclaw.py` 的 stdout JSON 一致。
 
 ---
 
@@ -10,13 +70,16 @@
 
 OpenClaw 可通过 **子进程调用** 本仓库脚本获取报告（协议以 OpenClaw 现有集成为准，如 CLI、HTTP、消息队列）。
 
-**推荐入口**：`scripts/run_for_openclaw.py`
+**推荐入口**：统一 CLI `cli.py`（Phase 2），或过渡方案 `scripts/run_for_openclaw.py`。
 
 ```bash
-# 仅研究，输出 Contract 报告（JSON 到 stdout）
-python scripts/run_for_openclaw.py research [SYMBOL] [--mock] [--llm]
+# 统一 CLI（项目根）
+python cli.py research [SYMBOL] [--mock] [--llm]
+python cli.py backtest [SYMBOL] [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--mock] [--llm]
+python cli.py demo [SYMBOL] [--mock] [--llm]
 
-# 研究 + 回测，输出含回测指标的报告（JSON 到 stdout）
+# 或沿用 run_for_openclaw（JSON 到 stdout，与 adapter 报告格式一致）
+python scripts/run_for_openclaw.py research [SYMBOL] [--mock] [--llm]
 python scripts/run_for_openclaw.py backtest [SYMBOL] [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--mock] [--llm]
 ```
 
@@ -68,6 +131,20 @@ OpenClaw 中 Kimi Coding 的模型标识为 **`kimi-coding/k2p5`**（provider/mo
 | pnl | number | 累计盈亏 |
 | trade_count | number | 交易次数 |
 | strategy_run_id | number | Experience Store 中的 strategy_run id |
+
+### demo 任务（E2E 四块）
+
+`run_demo_report()` 或 `execute(RoutedCommand(subcommand="demo"), as_json=True)` 返回：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| task | string | `"demo"` |
+| symbol | string | 标的 |
+| completed_at | string | ISO 时间 |
+| research | object | 研究结论（thesis、key_drivers、confidence、suggested_action、raw_contract 等） |
+| strategy | object | 策略生成（action、allowed_position_size、rationale） |
+| backtest | object | 回测结果（sharpe、max_drawdown、win_rate、pnl、trade_count） |
+| summary | object | 交易总结（strategy_run_id、sentence） |
 
 ---
 
