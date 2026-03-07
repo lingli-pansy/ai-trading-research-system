@@ -1,5 +1,7 @@
 from dataclasses import dataclass
+
 from ai_trading_research_system.portfolio.engine import PortfolioEngine
+
 
 @dataclass
 class PaperOrderResult:
@@ -8,6 +10,17 @@ class PaperOrderResult:
     quantity: float
     price: float
     status: str
+
+
+@dataclass
+class PaperRunnerResult:
+    """单次 Paper 执行结果（runner.run_once 返回值）。"""
+    symbol: str
+    signal_action: str
+    size_fraction: float
+    order_done: bool
+    order_result: PaperOrderResult | None = None
+    message: str = ""
 
 class PaperTradingEngine:
     def __init__(self, portfolio: PortfolioEngine):

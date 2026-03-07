@@ -28,6 +28,13 @@ def _default_date_range() -> tuple[str, str]:
     return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
 
 
+def _paper_date_range(lookback_days: int = 5) -> tuple[str, str]:
+    """Last lookback_days for paper simulation (Nautilus short-window backtest)."""
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=max(1, lookback_days))
+    return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
+
+
 def _symbol_to_venue(symbol: str) -> str:
     """Backtest uses simulated venue SIM so BacktestVenueConfig(name='SIM') matches."""
     return "SIM"
@@ -188,4 +195,24 @@ def run_backtest(
         win_rate=win_rate,
         pnl=pnl,
         trade_count=max(total_orders, total_positions),
+    )
+
+
+def run_paper_simulation(
+    symbol: str,
+    signal: AISignal,
+    lookback_days: int = 5,
+    catalog_dir: Path | None = None,
+) -> BacktestMetrics:
+    """
+    Run NautilusTrader backtest on a short recent window (paper simulation).
+    Same strategy/signal as full backtest; used by Paper path when use_nautilus=True.
+    """
+    start_date, end_date = _paper_date_range(lookback_days)
+    return run_backtest(
+        symbol=symbol,
+        signal=signal,
+        start_date=start_date,
+        end_date=end_date,
+        catalog_dir=catalog_dir,
     )

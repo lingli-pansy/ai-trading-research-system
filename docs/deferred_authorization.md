@@ -1,6 +1,6 @@
-# 暂缓项与授权就绪后对接清单
+# 实盘与生产对接清单
 
-本清单为 **实盘前工作** 的一部分，与 [live_readiness_checklist.md](live_readiness_checklist.md) 配合使用：MVP 已按 5 条标准交付，以下能力在**授权/权限满足后**按本清单逐项对接；当前状态与具体步骤如下。
+本清单为 **实盘前工作** 的一部分，与 [live_readiness_checklist.md](live_readiness_checklist.md) 配合使用。**IB Gateway、LLM API 已支持**，按 [dev_prerequisites.md](dev_prerequisites.md) 配置即可使用；以下为各能力配置与对接步骤。
 
 ---
 
@@ -21,7 +21,7 @@
   ```
 - 验证端口可达：运行 `python scripts/verify_ibkr.py`（或 `nc -zv 127.0.0.1 4002`，若系统无 telnet）。
 
-**授权就绪后对接步骤：**
+**对接步骤：**
 
 1. 确认 TWS/IB Gateway 已启用 API，端口可访问（见上）。
 2. 本仓当前执行层为自研 `PaperTradingEngine`，未直接连 IBKR。对接方式二选一：
@@ -37,7 +37,7 @@
 - **前置**：OpenClaw 服务端地址与调用方式、生产环境网络与鉴权授权。
 - **当前**：CLI 报告（`run_for_openclaw.py` stdout JSON）与 REPORT_DIR、NOTIFY_FILE 占位已可用。
 
-**授权就绪后对接步骤：**
+**对接步骤：**
 
 1. **调用方式**：OpenClaw 通过子进程调用 `run_for_openclaw.py`（或调度脚本 `run_scheduled.py`）即可获取 JSON 报告；协议以 OpenClaw 现有集成为准。
 2. **可选**：若需 HTTP 触发，可在本仓或网关层增加轻量 HTTP 服务，接收 task（research/backtest）、symbol 等参数，内部调用 `run_for_openclaw` 或 `openclaw_adapter`，将报告 JSON 返回或写入 REPORT_DIR。
@@ -52,7 +52,7 @@
 - **前置**：密钥管理策略、环境变量或保密存储的权限与流程。
 - **当前**：本地 .env 与 dev 用法见 [dev_prerequisites.md](dev_prerequisites.md)；生产密钥不入库。
 
-**授权就绪后对接步骤：**
+**对接步骤：**
 
 1. 在生产环境使用环境变量或保密存储（如云厂商 Secret Manager、HashiCorp Vault）注入 `OPENAI_API_KEY` 或 `KIMI_CODE_API_KEY`（及可选 `KIMI_BASE_URL`、`KIMI_MODEL`、`KIMI_USER_AGENT`）。
 2. 确保运行 `run_research` / `run_for_openclaw` / `run_paper` 的进程能读取上述变量，且不在日志或报告中打印 key。
@@ -79,11 +79,11 @@
 
 ## 汇总
 
-| 项 | 授权就绪后动作 | 当前状态 |
+| 项 | 配置/对接步骤 | 当前状态 |
 |----|----------------|----------|
-| IBKR Paper | 接 TWS/Gateway 端口，新增或选用 IBKR 执行适配器，配置 IBKR_* 环境变量 | 本仓 Paper 可用；IBKR 未接 |
+| IBKR Paper | TWS/IB Gateway 端口与 API 已支持；配置 IBKR_* 环境变量，见上文 | 已支持，配置后可用 |
 | OpenClaw 服务端 | 以 CLI/子进程调用 run_for_openclaw；可选 HTTP 层；配置 REPORT_DIR、NOTIFY_FILE | CLI 报告 + NOTIFY_FILE 占位可用 |
-| 生产 API Key | 通过环境变量或保密存储注入 LLM/券商等 key，不落库 | 本地 .env 已文档化 |
+| LLM API | OPENAI_API_KEY 或 KIMI_CODE_API_KEY 配置于 .env，见 [dev_prerequisites.md](dev_prerequisites.md)；生产可用保密存储 | 已支持，配置后可用 |
 | 风控实装 | 已实装仓位上限与单日止损；可选配置 PAPER_*；Kill Switch 可扩展 | 已接入 PaperRunner，可配置 |
 
-授权就绪后，按上表逐项对接即可；无需改动 MVP 完成标准与已交付脚本/文档。
+按上表配置或对接即可；无需改动 MVP 完成标准与已交付脚本/文档。

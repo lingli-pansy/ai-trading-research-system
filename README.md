@@ -45,13 +45,15 @@ Execution Engine
 
 ## 快速开始
 
-### 首次试用清单（约 3 分钟）
+### 首屏试用一条主线（按顺序执行）
 
 1. **环境**：`pip install -e .`（可选：venv、`cp .env.example .env`，见 [docs/dev_prerequisites.md](docs/dev_prerequisites.md)）。
 2. **前置检查**：`python scripts/check_dev_prerequisites.py`。
-3. **主路径**：`python cli.py demo NVDA --mock`，可见研究结论、策略生成、回测结果、交易总结四块。
-4. **可选**：`python cli.py research NVDA --mock` 查看 Contract JSON。
-5. **可选**：OpenClaw 最快验证见下方「OpenClaw 最快验证」。
+3. **Demo**：`python cli.py demo NVDA --mock`，可见研究结论、策略生成、回测结果、交易总结四块。
+4. **E2E 校验**：`python scripts/run_e2e_check.py NVDA --mock`，校验 Pipeline 与 Experience Store 有数据。
+5. **OpenClaw 调用示例**：`python cli.py research NVDA --mock`（或 `python scripts/run_for_openclaw.py research NVDA --mock`）。完整报告格式见 [docs/openclaw_integration.md](docs/openclaw_integration.md)。
+
+**可选**：`python cli.py research NVDA --mock` 查看 Contract JSON；使用真实数据或 LLM 见下方命令示例。
 
 ### 命令示例
 
@@ -133,7 +135,7 @@ python cli.py research NVDA --mock
 | [docs/experience_schema.md](docs/experience_schema.md) | Experience Store 表结构 |
 | [docs/mvp_plan.md](docs/mvp_plan.md) | MVP 完成标准与 Post-MVP 路线 |
 | [docs/live_readiness_checklist.md](docs/live_readiness_checklist.md) | 实盘前工作清单（L1–L7） |
-| [docs/deferred_authorization.md](docs/deferred_authorization.md) | 授权就绪后对接（IBKR/OpenClaw/密钥/风控） |
+| [docs/deferred_authorization.md](docs/deferred_authorization.md) | 实盘与生产对接（IB Gateway、LLM 已支持；IBKR/OpenClaw/密钥/风控） |
 | [docs/PRD.md](docs/PRD.md) | 产品需求 |
 
 ## 目录结构

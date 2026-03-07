@@ -4,6 +4,20 @@
 
 ---
 
+## 目标：标准接口层
+
+**现状**：OpenClaw 通过 `run_for_openclaw.py` 或 `cli.py` 子进程调用本仓，已有报告格式与本文档约定。
+
+**目标**：从「可调用脚本」升级为**标准接口层**，明确承接：
+
+- **调用方**：OpenClaw Agent / Skill 或其他上游（如调度、HTTP 网关）。
+- **契约**：入参（如 task、symbol、start/end、use_mock/use_llm）、出参（JSON 报告结构、错误码/超时约定）、调用方式（子进程 CLI 或薄 HTTP/本地 API）。
+- **职责**：本仓提供稳定接口层，上游只依赖契约而非具体脚本路径；脚本或 control 层作为该接口的一种实现。
+
+**本阶段**：仅文档约定目标；具体是「子进程 + 契约文档」还是「新增 HTTP/API」在后续阶段选定。当前 `run_for_openclaw.py` 与 `cli.py` 已满足子进程调用与报告格式，与上述目标兼容。
+
+---
+
 ## 交互形态与 Skill 打通
 
 **最终交互形态**：用户通过 **OpenClaw Agent**（聊天或命令）与系统交互，而非直接执行本仓脚本。例如用户说「analyse NVDA」「run backtest」「show experience」，由 OpenClaw Agent 理解意图并驱动本系统执行。
@@ -14,7 +28,7 @@
 - CLI 设计时需保证：命令形式、参数、stdout/报告格式与 OpenClaw Skill 的入参/出参一致，便于 Agent 调用 Skill 即完成一次完整能力调用；
 - 这样既保留本地「一条命令跑通」的体验，又保证 OpenClaw Agent 通过 Skill 获得同一套能力。
 
-**若 OpenClaw 已安装到本地**：可在 OpenClaw 中配置 Skill 调用本仓库的 CLI（或当前过渡方案：`run_for_openclaw.py` / `run_scheduled.py`），传入 symbol、task 等参数，从 stdout 或 REPORT_DIR 获取 JSON 报告。IB Gateway 已启动时，后续可对接实盘/Paper 下单（当前仍为本仓 Paper 管道）。
+**若 OpenClaw 已安装到本地**：可在 OpenClaw 中配置 Skill 调用本仓库的 CLI（或当前过渡方案：`run_for_openclaw.py` / `run_scheduled.py`），传入 symbol、task 等参数，从 stdout 或 REPORT_DIR 获取 JSON 报告。IB Gateway 已支持，配置后即可对接实盘/Paper 下单；配置见 [dev_prerequisites.md](dev_prerequisites.md)。
 
 ---
 

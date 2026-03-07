@@ -1,25 +1,19 @@
 """
 PaperRunner: 封装 Paper 引擎与策略挂载，支持一次注入或持续运行。
-使用本仓 PaperTradingEngine 做 Research → Contract → Paper 试跑；IBKR Paper 后续接入。
+默认使用 NautilusTrader 短窗口回测（NautilusPaperRunner）；use_nautilus=False 时使用本仓 PaperTradingEngine（过渡层，将废弃）。
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from ai_trading_research_system.strategy.translator import AISignal
 from ai_trading_research_system.portfolio.engine import PortfolioEngine
-from ai_trading_research_system.execution.paper import PaperTradingEngine, PaperOrderResult
-
-
-@dataclass
-class PaperRunnerResult:
-    """单次 Paper 执行结果。"""
-    symbol: str
-    signal_action: str
-    size_fraction: float
-    order_done: bool
-    order_result: PaperOrderResult | None = None
-    message: str = ""
+from ai_trading_research_system.execution.paper import (
+    PaperTradingEngine,
+    PaperOrderResult,
+    PaperRunnerResult,
+)
+from ai_trading_research_system.execution.nautilus_paper_runner import NautilusPaperRunner
 
 
 def _check_position_limit(
@@ -61,7 +55,8 @@ def _check_daily_stop(daily_pnl_pct: float | None, daily_stop_loss_pct: float | 
 class PaperRunner:
     """
     封装 Paper 引擎，支持注入 Contract 派生信号并执行一次或持续运行。
-    start() 后策略挂载完成；run_once() 执行一次 Paper 周期（取价、按信号下单）。
+    默认 use_nautilus=True：由 NautilusTrader 短窗口回测执行（与 backtest 链同一套策略）。
+    use_nautilus=False：使用本仓 PaperTradingEngine（过渡层，将废弃）。
     """
 
     def __init__(
@@ -71,9 +66,17 @@ class PaperRunner:
         initial_cash: float = 100_000.0,
         max_position_pct: float | None = None,
         daily_stop_loss_pct: float | None = None,
+        use_nautilus: bool = True,
+        paper_lookback_days: int = 5,
     ):
         self.symbol = symbol
-        self._engine = PaperTradingEngine(PortfolioEngine(initial_cash=initial_cash))
+        self._use_nautilus = use_nautilus
+        self._nautilus: NautilusPaperRunner | None = (
+            NautilusPaperRunner(symbol, lookback_days=paper_lookback_days) if use_nautilus else None
+        )
+        self._engine: PaperTradingEngine | None = (
+            PaperTradingEngine(PortfolioEngine(initial_cash=initial_cash)) if not use_nautilus else None
+        )
         self._signal: AISignal | None = None
         self._started = False
         self._max_position_pct = max_position_pct
@@ -82,14 +85,20 @@ class PaperRunner:
     def inject(self, signal: AISignal) -> None:
         """注入 Research → Translator 产出的信号，完成策略挂载。"""
         self._signal = signal
+        if self._nautilus is not None:
+            self._nautilus.inject(signal)
 
     def start(self) -> None:
         """启动 Runner，策略已挂载后可调用 run_once。"""
         self._started = True
+        if self._nautilus is not None:
+            self._nautilus.start()
 
     def stop(self) -> None:
         """停止 Runner。"""
         self._started = False
+        if self._nautilus is not None:
+            self._nautilus.stop()
 
     def run_once(
         self,
@@ -99,10 +108,24 @@ class PaperRunner:
         daily_pnl_pct: float | None = None,
     ) -> PaperRunnerResult:
         """
-        执行一次 Paper 周期：若信号为 paper_buy 且 size_fraction > 0 则按当前价下单。
-        price: 当前用于下单的价格（通常来自 YFinanceProvider 或 mock）。
-        daily_pnl_pct: 当日已实现+未实现收益百分比，用于单日止损；不传则不触发日止损检查。
+        执行一次 Paper 周期。
+        use_nautilus=True：NautilusTrader 短窗口回测，与 backtest 链同一套策略。
+        use_nautilus=False：本仓 PaperTradingEngine 按当前价下单（过渡层）。
         """
+        if self._nautilus is not None:
+            return self._nautilus.run_once(price, use_mock=use_mock, daily_pnl_pct=daily_pnl_pct)
+        return self._run_once_legacy(price, daily_pnl_pct)
+
+    def _run_once_legacy(self, price: float, daily_pnl_pct: float | None) -> PaperRunnerResult:
+        """Legacy path: PaperTradingEngine (use_nautilus=False)."""
+        if self._engine is None:
+            return PaperRunnerResult(
+                symbol=self.symbol,
+                signal_action="",
+                size_fraction=0.0,
+                order_done=False,
+                message="Legacy engine not initialized",
+            )
         if not self._started:
             return PaperRunnerResult(
                 symbol=self.symbol,

@@ -37,7 +37,7 @@
 ## 相关文档
 
 - [mvp_plan.md](mvp_plan.md) — MVP 完成标准与实盘前工作总览
-- [deferred_authorization.md](deferred_authorization.md) — IBKR / OpenClaw / 生产密钥 / 风控对接步骤
+- [deferred_authorization.md](deferred_authorization.md) — 实盘与生产对接清单（IBKR / OpenClaw / LLM / 风控）
 - [restructuring_plan.md](restructuring_plan.md) — Phase 5 实盘就绪
 - [architecture.md](architecture.md) — Execution Layer 与风控
 - [dev_prerequisites.md](dev_prerequisites.md) — 开发前准备与验收

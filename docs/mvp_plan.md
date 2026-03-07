@@ -115,10 +115,10 @@ MVP 视为完成需满足：
 | 1 | 研究任务可自动运行 | 已达成 | `run_scheduled.py`（--once 或 SCHEDULE_INTERVAL_MINUTES）、cron 示例见 [scheduling.md](scheduling.md) | 报告落盘至 REPORT_DIR |
 | 2 | 多 Agent 分析产出 DecisionContract | 已达成 | ResearchOrchestrator、真实数据（yfinance 行情/基本面/新闻）、LLMResearchAgent（可选 --llm）、Context 相关 Agent 产出随输入变化 | 无 |
 | 3 | Rule Engine 产出信号 | 已达成 | ContractTranslator、decision/rules.py，与 Nautilus 信号一致 | 无 |
-| 4 | Paper trading 管道可用 | 已达成 | run_paper、PaperRunner、本仓 PaperTradingEngine；IBKR Paper 暂缓（需授权） | 见下方暂缓项 |
-| 5 | OpenClaw 可触发任务并返回报告 | 已达成 | run_for_openclaw.py、openclaw_adapter（research/backtest 报告 JSON），见 [openclaw_integration.md](openclaw_integration.md) | 协议为 CLI/stdout；服务端对接可暂缓 |
+| 4 | Paper trading 管道可用 | 已达成 | run_paper、PaperRunner、本仓 PaperTradingEngine；IBKR Paper 已支持，配置 IBKR_* 后可用 | 配置见 [dev_prerequisites.md](dev_prerequisites.md) |
+| 5 | OpenClaw 可触发任务并返回报告 | 已达成 | run_for_openclaw.py、openclaw_adapter（research/backtest 报告 JSON），见 [openclaw_integration.md](openclaw_integration.md) | 协议为 CLI/stdout；服务端对接按需配置 |
 
-**暂缓项（实盘前补齐）**：IBKR Paper 真实下单、OpenClaw 服务端或生产环境接入、生产用 API Key 与密钥管理，按 [live_readiness_checklist.md](live_readiness_checklist.md) 与 [deferred_authorization.md](deferred_authorization.md) 逐项对接。本仓 Paper 与 OpenClaw CLI 报告已可用，不影响 MVP 验收。
+**实盘/生产**：IB Gateway、LLM API 已支持，配置见 [dev_prerequisites.md](dev_prerequisites.md)；其余对接步骤见 [deferred_authorization.md](deferred_authorization.md) 与 [live_readiness_checklist.md](live_readiness_checklist.md)。
 
 ------------------------------------------------------------------------
 
@@ -180,5 +180,5 @@ MVP 完成后，按 **[restructuring_plan.md](restructuring_plan.md)** 分阶段
 - [restructuring_plan.md](restructuring_plan.md) — 重构总纲与 Phase 1–5
 - [architecture.md](architecture.md) — 架构
 - [live_readiness_checklist.md](live_readiness_checklist.md) — **实盘前工作清单**（必过项与补齐任务）
-- [deferred_authorization.md](deferred_authorization.md) — 授权就绪后对接清单（IBKR / OpenClaw / 密钥 / 风控）
+- [deferred_authorization.md](deferred_authorization.md) — 实盘与生产对接清单（IBKR / OpenClaw / LLM / 风控）
 - [decision_contract.md](decision_contract.md) / [strategy_spec.md](strategy_spec.md) / [experience_schema.md](experience_schema.md) — 规范与数据
