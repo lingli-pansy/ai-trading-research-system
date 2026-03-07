@@ -1,0 +1,52 @@
+# --- 隐私与密钥（切勿提交）---
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+credentials/
+
+# --- 本地数据与持久化 ---
+*.db
+*.sqlite
+*.sqlite3
+data/catalog/
+catalog/
+*.parquet
+.nautilus/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+.eggs/
+*.egg-info/
+*.egg
+dist/
+build/
+
+# --- 日志与临时 ---
+logs/
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# --- 系统与 IDE ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- 项目本地配置（若含路径/密钥则忽略）---
+# .memoryhub_root
