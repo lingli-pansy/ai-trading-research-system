@@ -20,6 +20,15 @@ cp .env.example .env
 # 编辑 .env，填入 OPENAI_API_KEY 等（仅本地使用）
 ```
 
+## 本仓库 Git 身份（仅本地）
+
+首次提交使用本仓库局部配置 `user.name` / `user.email`（未改全局）。若希望用自己身份提交，可在本仓执行：
+
+```bash
+git config user.name "你的名字"
+git config user.email "你的邮箱"
+```
+
 ## 相关
 
 - 开发前准备与验收：[dev_prerequisites.md](dev_prerequisites.md)
