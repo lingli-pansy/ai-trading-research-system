@@ -32,4 +32,4 @@ git config user.email "你的邮箱"
 ## 相关
 
 - 开发前准备与验收：[dev_prerequisites.md](dev_prerequisites.md)
-- 执行计划：[plan_week_to_paper.md](plan_week_to_paper.md)
+- MVP 与实盘前工作：[mvp_plan.md](mvp_plan.md)、[live_readiness_checklist.md](live_readiness_checklist.md)

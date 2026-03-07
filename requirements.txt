@@ -1,2 +1,7 @@
+# 与 pyproject.toml 一致；推荐使用 pip install -e . 或 uv sync
 pydantic>=2.7,<3
 python-dotenv>=1.0,<2
+nautilus_trader>=1.220
+yfinance>=0.2.40
+openai>=1.0,<2
+ib_insync>=0.9.86

@@ -2,8 +2,9 @@
 
 开发前建议按以下顺序阅读，便于直接进入开发阶段。
 
-**当前执行计划**：跑通链路并在 Paper 试跑 → 见 [plan_week_to_paper.md](plan_week_to_paper.md)（执行顺序与阶段验收）。  
-**开发前准备**：阶段验收前置条件（权限、数据、IBKR Paper 等）→ 见 [dev_prerequisites.md](dev_prerequisites.md)。
+**MVP 已达成**；实盘前工作见 [live_readiness_checklist.md](live_readiness_checklist.md)。  
+**开发前准备**：权限、数据、IBKR Paper 等 → 见 [dev_prerequisites.md](dev_prerequisites.md)。  
+**脚本用法**：见仓库根 [README.md](../README.md#脚本用法research--回测--paper--联调)。
 
 ---
 
@@ -32,7 +33,11 @@
 | 文档 | 用途 |
 |------|------|
 | [PRD.md](PRD.md) | 产品定位、目标用户、核心能力、MVP 范围、成功指标、未来扩展（与重构对齐） |
-| [live_readiness_checklist.md](live_readiness_checklist.md) | 策略进入实盘前的检查项（回测稳定性、OOS、纸面、风控、Kill Switch、券商连通性） |
+| [live_readiness_checklist.md](live_readiness_checklist.md) | **实盘前工作清单**：7 项必过检查（回测稳定性、OOS、交易次数、回撤、Paper、风控、券商连通性）及补齐任务 L1–L7 |
+| [mock_vs_real.md](mock_vs_real.md) | 各模块 Mock vs 真实实现对照，及替换优先级（Research/数据源/IBKR/风控） |
+| [openclaw_integration.md](openclaw_integration.md) | OpenClaw 触发方式与报告格式（run_for_openclaw、JSON 报告） |
+| [scheduling.md](scheduling.md) | 研究任务自动运行（cron、run_scheduled、REPORT_DIR 与环境变量） |
+| [deferred_authorization.md](deferred_authorization.md) | **授权就绪后对接清单**：IBKR Paper、OpenClaw 服务端、生产密钥、风控（与实盘前工作配合） |
 
 ---
 
@@ -41,4 +46,4 @@
 - **DecisionContract**：单次研究输出；**StrategySpec**：由 Contract + 回测验证后得到的可复现策略定义，见 [strategy_spec.md](strategy_spec.md)。
 - **Strategy Bridge**：Contract → 信号/策略参数；产出 StrategySpec 时由 **StrategyCompiler** 编译为 NautilusTrader 策略。
 - **Experience Store**：表结构以 [experience_schema.md](experience_schema.md) 为准；实现与闭环逻辑见 [restructuring_plan.md](restructuring_plan.md)。
-- **实盘**：Phase 5 实施前需通过 [live_readiness_checklist.md](live_readiness_checklist.md)。
+- **实盘**：MVP 完成后、Phase 5 实施前需通过 [live_readiness_checklist.md](live_readiness_checklist.md)（实盘前工作清单）全部检查项。

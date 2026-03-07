@@ -1,0 +1,182 @@
+"""
+PaperRunner: 封装 Paper 引擎与策略挂载，支持一次注入或持续运行。
+使用本仓 PaperTradingEngine 做 Research → Contract → Paper 试跑；IBKR Paper 后续接入。
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from ai_trading_research_system.strategy.translator import AISignal
+from ai_trading_research_system.portfolio.engine import PortfolioEngine
+from ai_trading_research_system.execution.paper import PaperTradingEngine, PaperOrderResult
+
+
+@dataclass
+class PaperRunnerResult:
+    """单次 Paper 执行结果。"""
+    symbol: str
+    signal_action: str
+    size_fraction: float
+    order_done: bool
+    order_result: PaperOrderResult | None = None
+    message: str = ""
+
+
+def _check_position_limit(
+    engine: PaperTradingEngine,
+    symbol: str,
+    price: float,
+    size_fraction: float,
+    max_position_pct: float | None,
+) -> bool:
+    """仓位上限：下单后该标的市值占组合权益比例不得超过 max_position_pct（0~100）。"""
+    if max_position_pct is None or max_position_pct <= 0:
+        return True
+    state = engine.portfolio.state
+    cash = state.cash
+    positions = state.positions
+    current_qty = positions[symbol].quantity if symbol in positions else 0.0
+    current_sym_value = current_qty * price
+    new_qty = engine.portfolio.target_quantity(symbol, price, size_fraction)
+    new_value = new_qty * price
+    total_equity = cash + sum(
+        p.quantity * (price if p.symbol == symbol else p.avg_price)
+        for p in positions.values()
+    )
+    if total_equity <= 0:
+        return True
+    position_pct_after = (current_sym_value + new_value) / total_equity * 100.0
+    return position_pct_after <= max_position_pct
+
+
+def _check_daily_stop(daily_pnl_pct: float | None, daily_stop_loss_pct: float | None) -> bool:
+    """单日止损：若当日已实现+未实现亏损达到 daily_stop_loss_pct（如 -2 表示 -2%），则禁止新开仓。"""
+    if daily_stop_loss_pct is None or daily_stop_loss_pct <= 0:
+        return True
+    if daily_pnl_pct is None:
+        return True
+    return daily_pnl_pct > -daily_stop_loss_pct
+
+
+class PaperRunner:
+    """
+    封装 Paper 引擎，支持注入 Contract 派生信号并执行一次或持续运行。
+    start() 后策略挂载完成；run_once() 执行一次 Paper 周期（取价、按信号下单）。
+    """
+
+    def __init__(
+        self,
+        symbol: str,
+        *,
+        initial_cash: float = 100_000.0,
+        max_position_pct: float | None = None,
+        daily_stop_loss_pct: float | None = None,
+    ):
+        self.symbol = symbol
+        self._engine = PaperTradingEngine(PortfolioEngine(initial_cash=initial_cash))
+        self._signal: AISignal | None = None
+        self._started = False
+        self._max_position_pct = max_position_pct
+        self._daily_stop_loss_pct = daily_stop_loss_pct
+
+    def inject(self, signal: AISignal) -> None:
+        """注入 Research → Translator 产出的信号，完成策略挂载。"""
+        self._signal = signal
+
+    def start(self) -> None:
+        """启动 Runner，策略已挂载后可调用 run_once。"""
+        self._started = True
+
+    def stop(self) -> None:
+        """停止 Runner。"""
+        self._started = False
+
+    def run_once(
+        self,
+        price: float,
+        *,
+        use_mock: bool = False,
+        daily_pnl_pct: float | None = None,
+    ) -> PaperRunnerResult:
+        """
+        执行一次 Paper 周期：若信号为 paper_buy 且 size_fraction > 0 则按当前价下单。
+        price: 当前用于下单的价格（通常来自 YFinanceProvider 或 mock）。
+        daily_pnl_pct: 当日已实现+未实现收益百分比，用于单日止损；不传则不触发日止损检查。
+        """
+        if not self._started:
+            return PaperRunnerResult(
+                symbol=self.symbol,
+                signal_action="",
+                size_fraction=0.0,
+                order_done=False,
+                message="Runner not started",
+            )
+        signal = self._signal
+        if signal is None:
+            return PaperRunnerResult(
+                symbol=self.symbol,
+                signal_action="",
+                size_fraction=0.0,
+                order_done=False,
+                message="No signal injected",
+            )
+        if signal.action != "paper_buy" or signal.allowed_position_size <= 0:
+            return PaperRunnerResult(
+                symbol=self.symbol,
+                signal_action=signal.action,
+                size_fraction=signal.allowed_position_size,
+                order_done=False,
+                message=f"Signal does not allow buy: {signal.rationale}",
+            )
+        if price <= 0:
+            return PaperRunnerResult(
+                symbol=self.symbol,
+                signal_action=signal.action,
+                size_fraction=signal.allowed_position_size,
+                order_done=False,
+                message="Invalid price",
+            )
+        if not _check_position_limit(
+            self._engine,
+            self.symbol,
+            price,
+            signal.allowed_position_size,
+            self._max_position_pct,
+        ):
+            return PaperRunnerResult(
+                symbol=self.symbol,
+                signal_action=signal.action,
+                size_fraction=signal.allowed_position_size,
+                order_done=False,
+                message="Position limit exceeded",
+            )
+        if not _check_daily_stop(daily_pnl_pct, self._daily_stop_loss_pct):
+            return PaperRunnerResult(
+                symbol=self.symbol,
+                signal_action=signal.action,
+                size_fraction=signal.allowed_position_size,
+                order_done=False,
+                message="Daily stop loss triggered",
+            )
+        try:
+            result = self._engine.buy(
+                self.symbol,
+                price=price,
+                size_fraction=signal.allowed_position_size,
+            )
+            return PaperRunnerResult(
+                symbol=self.symbol,
+                signal_action=signal.action,
+                size_fraction=signal.allowed_position_size,
+                order_done=result.status == "filled",
+                order_result=result,
+                message=result.status,
+            )
+        except Exception as e:
+            return PaperRunnerResult(
+                symbol=self.symbol,
+                signal_action=signal.action,
+                size_fraction=signal.allowed_position_size,
+                order_done=False,
+                message=str(e),
+            )

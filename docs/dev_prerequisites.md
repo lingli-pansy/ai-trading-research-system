@@ -2,6 +2,8 @@
 
 各阶段验收前需具备以下前置条件；未满足时验收无法通过或需回退到自研/模拟方案。
 
+**快速核对**：在项目根目录执行 `python scripts/check_dev_prerequisites.py` 可自动核对环境、权限、依赖与配置；加 `--quick` 可跳过 yfinance 拉数（避免网络慢或限流）。未通过项需按下方清单补齐。
+
 ---
 
 ## 按阶段对照
@@ -40,12 +42,13 @@
 
 - [ ] **IBKR Paper 账号**：已注册并开通 Paper Trading
 - [ ] **TWS 或 IB Gateway**：已安装，可登录且选择 **Paper** 模式
-- [ ] **API 设置**：TWS → 配置 → API → 启用「Enable ActiveX and Socket Clients」，Paper 端口（如 **7497**）已设置并记住
-- [ ] **连通性**：本机 `telnet localhost 7497`（或 Gateway 所在机 IP）能通；若用 Docker 版 IB Gateway 则容器已启动且端口映射正确
+- [ ] **API 设置**：TWS → 配置 → API → 启用「Enable ActiveX and Socket Clients」，**Socket port** 以界面为准（常见 Paper 为 **7497**，部分 TWS/网关为 **4002**），并勾选「Allow connections from localhost only」或配置 Trusted IPs
+- [ ] **连通性**：运行 `python scripts/verify_ibkr.py` 检测 IBKR_HOST:IBKR_PORT 可达（或本机 `nc -zv localhost <端口>`）；若用 Docker 版 IB Gateway 则容器已启动且端口映射正确
+- [ ] **.env 配置**：在项目根 `.env` 中设置 `IBKR_HOST=127.0.0.1`、`IBKR_PORT=<TWS 中的 Socket port>`、`IBKR_CLIENT_ID=1`（端口与 TWS 一致，例如 4002）
 
 ### 配置与文档
 
-- [ ] **.env**：存在且含 `APP_ENV`、`DEFAULT_SYMBOL`（可选 `OPENAI_API_KEY`）；与 `config/settings.py` 一致
+- [ ] **.env**：复制 `cp .env.example .env`，按需填写 `APP_ENV`、`DEFAULT_SYMBOL`；LLM 二选一：`OPENAI_API_KEY` 或 `KIMI_CODE_API_KEY`（Kimi 可选 `KIMI_BASE_URL`、`KIMI_MODEL`，见 `.env.example`）
 - [ ] **README / docs**：已注明 `run_research.py`、`run_backtest.py`、`run_paper.py` 的用法与前提（阶段 6 验收前完成）
 
 ---
@@ -63,5 +66,14 @@
 
 ## 相关文档
 
-- 执行顺序与阶段验收：[plan_week_to_paper.md](plan_week_to_paper.md)
+- MVP 与实盘前工作：[mvp_plan.md](mvp_plan.md)、[live_readiness_checklist.md](live_readiness_checklist.md)
 - 实盘前检查（后续补齐）：[live_readiness_checklist.md](live_readiness_checklist.md)
+
+## 一键核对脚本
+
+在项目根目录执行：
+
+```bash
+python scripts/check_dev_prerequisites.py      # 含 yfinance 拉数检查
+python scripts/check_dev_prerequisites.py --quick   # 跳过拉数，仅环境与依赖
+```

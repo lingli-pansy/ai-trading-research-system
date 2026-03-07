@@ -1,6 +1,7 @@
 # --- 隐私与密钥（切勿提交）---
 .env
 .env.local
+.env.test
 .env.*.local
 *.pem
 *.key
@@ -15,6 +16,10 @@ data/catalog/
 catalog/
 *.parquet
 .nautilus/
+.reports/
+.experience/
+.backtest_catalog/
+.paper_stop
 
 # --- Python ---
 __pycache__/

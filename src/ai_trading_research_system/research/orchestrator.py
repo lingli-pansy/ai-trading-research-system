@@ -1,5 +1,12 @@
 from collections import defaultdict
-from ai_trading_research_system.data.providers import MockDataProvider
+
+from dotenv import load_dotenv
+from pathlib import Path
+# 从项目根加载 .env（包在 src/ai_trading_research_system/research/，根在 ../../..）
+_env_path = Path(__file__).resolve().parents[3] / ".env"
+load_dotenv(_env_path)
+
+from ai_trading_research_system.data.providers import MockDataProvider, YFinanceProvider
 from ai_trading_research_system.research.schemas import ResearchContext, DecisionContract
 from ai_trading_research_system.research.agents.news_agent import NewsAgent
 from ai_trading_research_system.research.agents.fundamental_agent import FundamentalAgent
@@ -8,18 +15,30 @@ from ai_trading_research_system.research.agents.bull_agent import BullThesisAgen
 from ai_trading_research_system.research.agents.bear_agent import BearThesisAgent
 from ai_trading_research_system.research.agents.uncertainty_agent import UncertaintyAgent
 from ai_trading_research_system.research.agents.synthesis_agent import SynthesisAgent
+from ai_trading_research_system.research.agents.llm_agent import LLMResearchAgent
 
 class ResearchOrchestrator:
-    def __init__(self, data_provider: MockDataProvider | None = None):
-        self.data_provider = data_provider or MockDataProvider()
-        self.agents = [
-            NewsAgent(),
-            FundamentalAgent(),
-            TechnicalContextAgent(),
-            BullThesisAgent(),
-            BearThesisAgent(),
-            UncertaintyAgent(),
-        ]
+    def __init__(
+        self,
+        data_provider: MockDataProvider | YFinanceProvider | None = None,
+        use_mock: bool = True,
+        use_llm: bool = False,
+    ):
+        if data_provider is not None:
+            self.data_provider = data_provider
+        else:
+            self.data_provider = MockDataProvider() if use_mock else YFinanceProvider()
+        if use_llm:
+            self.agents = [LLMResearchAgent()]
+        else:
+            self.agents = [
+                NewsAgent(),
+                FundamentalAgent(),
+                TechnicalContextAgent(),
+                BullThesisAgent(),
+                BearThesisAgent(),
+                UncertaintyAgent(),
+            ]
         self.synthesis = SynthesisAgent()
 
     def build_context(self, symbol: str) -> ResearchContext:
@@ -28,9 +47,13 @@ class ResearchOrchestrator:
         news = self.data_provider.get_news(symbol)
 
         price_summary = f"{symbol} last price {price.last_price}, daily change {price.change_pct:.1f}%, volume ratio {price.volume_ratio}."
+        rev = fundamentals.revenue_growth if fundamentals.revenue_growth is not None else 0.0
+        gross = fundamentals.gross_margin if fundamentals.gross_margin is not None else 0.0
+        pe = fundamentals.pe_ttm if fundamentals.pe_ttm is not None else 0.0
+        notes = fundamentals.notes or "N/A"
         fundamentals_summary = (
-            f"Revenue growth {fundamentals.revenue_growth:.0%}, gross margin {fundamentals.gross_margin:.0%}, "
-            f"PE TTM {fundamentals.pe_ttm}. Notes: {fundamentals.notes}"
+            f"Revenue growth {rev:.0%}, gross margin {gross:.0%}, "
+            f"PE TTM {pe}. Notes: {notes}"
         )
         news_summaries = [f"{item.title} — {item.summary}" for item in news]
 

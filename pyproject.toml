@@ -7,10 +7,14 @@ name = "ai-trading-research-system"
 version = "0.1.0"
 description = "AI research and decision enhancement system for personal trading workflows"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
   "pydantic>=2.7,<3",
   "python-dotenv>=1.0,<2",
+  "nautilus_trader>=1.220",
+  "yfinance>=0.2.40",
+  "openai>=1.0,<2",
+  "ib_insync>=0.9.86",
 ]
 
 [tool.setuptools]

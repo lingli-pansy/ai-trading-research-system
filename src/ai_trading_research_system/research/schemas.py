@@ -12,6 +12,14 @@ SuggestedAction = Literal[
 ]
 TimeHorizon = Literal["intraday", "swing", "position"]
 
+
+class StrategyParams(BaseModel):
+    """Optional strategy parameters suggested by research (see strategy_spec.md)."""
+    stop_loss_pct: float | None = None
+    take_profit_pct: float | None = None
+    max_position_pct: float | None = None
+
+
 class DecisionContract(BaseModel):
     symbol: str
     analysis_time: datetime = Field(default_factory=datetime.utcnow)
@@ -26,6 +34,11 @@ class DecisionContract(BaseModel):
     suggested_action: SuggestedAction
     time_horizon: TimeHorizon = "swing"
     risk_flags: list[str] = Field(default_factory=list)
+
+    # Extended fields (target architecture)
+    strategy_params: StrategyParams | None = None
+    backtest_reference: str | None = None
+    experience_basis: list[str] = Field(default_factory=list)
 
 class ResearchContext(BaseModel):
     symbol: str
