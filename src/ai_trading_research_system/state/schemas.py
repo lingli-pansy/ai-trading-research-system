@@ -98,3 +98,47 @@ def action_type_from_weights(current: float, target: float) -> ActionType:
     if target < current:
         return "TRIM"
     return "HOLD"
+
+
+@dataclass
+class RunIndexEntry:
+    """运行索引单条：写入 runs/index.json，供 get_recent_runs / get_last_run 使用。"""
+    run_id: str
+    timestamp: str
+    symbols: list[str]
+    decision_summary: str
+    portfolio_value: float
+    orders: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "run_id": self.run_id,
+            "timestamp": self.timestamp,
+            "symbols": list(self.symbols),
+            "decision_summary": self.decision_summary,
+            "portfolio_value": self.portfolio_value,
+            "orders": self.orders,
+        }
+
+
+@dataclass
+class ExperienceRecord:
+    """单次 run 经验记录：追加到 runs/experience.jsonl，非学习系统，仅记录。"""
+    run_id: str
+    timestamp: str
+    symbols: list[str]
+    rebalance_plan: dict[str, Any]
+    decision_summary: str
+    portfolio_before: dict[str, Any]
+    portfolio_after: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "run_id": self.run_id,
+            "timestamp": self.timestamp,
+            "symbols": list(self.symbols),
+            "rebalance_plan": dict(self.rebalance_plan),
+            "decision_summary": self.decision_summary,
+            "portfolio_before": dict(self.portfolio_before),
+            "portfolio_after": dict(self.portfolio_after),
+        }

@@ -94,7 +94,55 @@ def main() -> int:
 
     p_status = subparsers.add_parser("status", help="System status summary (experiment cycle, health, policy, triggers)")
 
+    p_agent_run_once = subparsers.add_parser("agent-run-once", help="Agent runtime: one autonomous paper cycle, then exit")
+    p_agent_run_once.add_argument("--symbols", default=None, help="Comma-separated symbols (default: NVDA)")
+    p_agent_run_once.add_argument("--capital", type=float, default=10000, help="Capital (default 10000)")
+    p_agent_run_once.add_argument("--benchmark", default="SPY", help="Benchmark (default SPY)")
+    _add_common(p_agent_run_once)
+
+    p_agent_loop = subparsers.add_parser("agent-loop", help="Agent runtime: run autonomous loop every N seconds")
+    p_agent_loop.add_argument("--interval", type=float, default=300, help="Seconds between runs (default 300)")
+    p_agent_loop.add_argument("--symbols", default=None, help="Comma-separated symbols (default: NVDA)")
+    p_agent_loop.add_argument("--capital", type=float, default=10000, help="Capital (default 10000)")
+    p_agent_loop.add_argument("--benchmark", default="SPY", help="Benchmark (default SPY)")
+    _add_common(p_agent_loop)
+
     args = parser.parse_args()
+
+    if args.command == "agent-run-once":
+        import time
+        from ai_trading_research_system.agent.runtime import AutonomousTradingAgent, format_run_observability
+        symbols = [s.strip() for s in (args.symbols or "NVDA").split(",") if s.strip()]
+        agent = AutonomousTradingAgent(
+            symbols=symbols,
+            capital=getattr(args, "capital", 10000),
+            benchmark=getattr(args, "benchmark", "SPY"),
+            use_mock=not getattr(args, "llm", False),
+            use_llm=getattr(args, "llm", False),
+            execute_paper=True,
+        )
+        summary = agent.run_once()
+        print(format_run_observability(summary))
+        return 0 if summary.get("ok", True) else 1
+
+    if args.command == "agent-loop":
+        import time
+        from ai_trading_research_system.agent.runtime import AutonomousTradingAgent, format_run_observability
+        symbols = [s.strip() for s in (args.symbols or "NVDA").split(",") if s.strip()]
+        agent = AutonomousTradingAgent(
+            symbols=symbols,
+            capital=getattr(args, "capital", 10000),
+            benchmark=getattr(args, "benchmark", "SPY"),
+            use_mock=not getattr(args, "llm", False),
+            use_llm=getattr(args, "llm", False),
+            execute_paper=True,
+        )
+        interval = getattr(args, "interval", 300)
+        while True:
+            summary = agent.run_once()
+            print(format_run_observability(summary))
+            print("---")
+            time.sleep(interval)
 
     if args.command == "status":
         from ai_trading_research_system.services.status_service import get_system_status

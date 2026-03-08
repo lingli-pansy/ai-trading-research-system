@@ -115,3 +115,51 @@ def test_run_store_get_previous_research_snapshot(tmp_path: Path) -> None:
     assert prev is not None
     assert prev.get("symbol") == "NVDA"
     assert prev.get("thesis") == "test"
+
+
+def test_run_store_append_run_index_and_get_recent_runs(tmp_path: Path) -> None:
+    store = RunStore(root=tmp_path)
+    assert store.get_last_run() is None
+    assert store.get_recent_runs(5) == []
+    store.append_run_index({
+        "run_id": "run_20260101_0930",
+        "timestamp": "2026-01-01T09:30:00Z",
+        "symbols": ["SPY", "QQQ", "NVDA"],
+        "decision_summary": "SPY ADD 0.05",
+        "portfolio_value": 100540.0,
+        "orders": 2,
+    })
+    store.append_run_index({
+        "run_id": "run_20260101_1000",
+        "timestamp": "2026-01-01T10:00:00Z",
+        "symbols": ["NVDA"],
+        "decision_summary": "no_trigger",
+        "portfolio_value": 100540.0,
+        "orders": 0,
+    })
+    assert (tmp_path / "index.json").exists()
+    last = store.get_last_run()
+    assert last is not None
+    assert last["run_id"] == "run_20260101_1000"
+    recent = store.get_recent_runs(2)
+    assert len(recent) == 2
+    assert recent[0]["run_id"] == "run_20260101_1000"
+    assert recent[1]["run_id"] == "run_20260101_0930"
+
+
+def test_run_store_append_experience(tmp_path: Path) -> None:
+    store = RunStore(root=tmp_path)
+    store.append_experience({
+        "run_id": "run_20260101_0930",
+        "timestamp": "2026-01-01T09:30:00Z",
+        "symbols": ["SPY", "NVDA"],
+        "rebalance_plan": {"items": [{"symbol": "SPY", "action_type": "ADD", "delta": 0.05}]},
+        "decision_summary": "SPY ADD 0.05",
+        "portfolio_before": {"equity_estimate": 100000},
+        "portfolio_after": {"equity_estimate": 100540},
+    })
+    assert (tmp_path / "experience.jsonl").exists()
+    with open(tmp_path / "experience.jsonl", encoding="utf-8") as f:
+        line = f.read().strip()
+    assert "run_20260101_0930" in line
+    assert "100000" in line

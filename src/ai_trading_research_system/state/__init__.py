@@ -8,6 +8,8 @@ from ai_trading_research_system.state.schemas import (
     RebalancePlanItem,
     PortfolioSnapshot,
     PaperExecutionResult,
+    RunIndexEntry,
+    ExperienceRecord,
     action_type_from_weights,
 )
 
@@ -18,5 +20,7 @@ __all__ = [
     "RebalancePlanItem",
     "PortfolioSnapshot",
     "PaperExecutionResult",
+    "RunIndexEntry",
+    "ExperienceRecord",
     "action_type_from_weights",
 ]

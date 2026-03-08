@@ -38,8 +38,10 @@
   - `artifacts/candidate_decision.json`, `final_decision.json`, `order_intents.json`, `rebalance_plan.json`  
   - `execution/paper_result.json`  
   - `audit.json`, `meta.json`  
+- **runs/index.json**：运行索引（run_id, timestamp, symbols, decision_summary, portfolio_value, orders），经 `RunStore.append_run_index` / `get_recent_runs` / `get_last_run` 读写。  
+- **runs/experience.jsonl**：经验记录（每行一条 JSON：run_id, timestamp, symbols, rebalance_plan, decision_summary, portfolio_before, portfolio_after），经 `RunStore.append_experience` 追加；仅记录，非学习系统。  
 - **reports/**：周报等报告（`weekly_report_*.json`）  
-- 所有 run 读写经 **`state.RunStore`**，禁止各 service 直接写 run 目录。  
+- 所有 run 读写经 **`state.RunStore`**，禁止 CLI/agent 直接写 runs/ 下文件。  
 
 ---
 
@@ -48,10 +50,26 @@
 - **单 run 复盘**：`RunStore.replay_run(run_id)` → symbols, ranking, trigger, decision, rebalance_plan, execution, portfolio_before/after  
 - **最近一次摘要**：`RunStore.get_latest_run_summary()` → run_id, final_decision, order_intents, portfolio_after  
 - **最近组合状态**：`RunStore.get_latest_portfolio_state()`（优先读 runs 内 portfolio_after，否则 fallback API）  
+- **历史运行索引**：`RunStore.get_recent_runs(n)` / `RunStore.get_last_run()` → 快速查看最近 n 条或最后一条 run 索引。  
 
 ---
 
-## 6. 哪些入口是兼容层，不建议新开发依赖？
+## 6. Agent Runtime（自治交易循环）
+
+- **用途**：让 OpenClaw agent 持续跑 **observe → decide → act → record** 循环，不扩展复杂策略，只提供 runtime 能力。  
+- **模块**：`agent.runtime.AutonomousTradingAgent`  
+  - **run_once()**：加载最新 portfolio state → 调用 `autonomous_paper_cycle` → 更新 run index 与 experience log → 返回 run summary。  
+  - **run_loop(interval_seconds=300)**：`while True: run_once(); sleep(interval)`。  
+- **Run Index**：`runs/index.json`，由 `RunStore.append_run_index` 写入；agent 通过 `get_recent_runs(n)` / `get_last_run()` 快速查历史。  
+- **Experience Log**：`runs/experience.jsonl`，由 `RunStore.append_experience` 追加；每 run 一条记录（run_id, timestamp, symbols, rebalance_plan, decision_summary, portfolio_before, portfolio_after），仅记录不学习。  
+- **CLI**：  
+  - 单次：`python -m ai_trading_research_system.presentation.cli agent-run-once [--symbols NVDA,SPY] [--capital 10000]`  
+  - 循环：`python -m ai_trading_research_system.presentation.cli agent-loop --interval 300 [--symbols NVDA,SPY]`  
+- **可观测输出**：每次 run 打印 RUN id、PLAN（如 SPY ADD 0.05）、EXECUTION（订单数）、PORTFOLIO VALUE（before → after）。
+
+---
+
+## 7. 哪些入口是兼容层，不建议新开发依赖？
 
 - **run_paper**（CLI `paper`）：已复用 autonomous_paper_cycle，保留 CLI 别名与 IBKR 分支；新逻辑应走 paper-cycle / autonomous_paper_cycle。  
 - **scripts/run_*.py**：与 CLI 对应，多为兼容入口；主路径为 `cli paper-cycle` 与 `run_for_openclaw.py autonomous_paper_cycle`。  

@@ -1,8 +1,9 @@
 """
 RunStore: state-aware 统一数据访问。
-所有 run / snapshot / decision / execution / audit 落盘必须经此接口。
+所有 run / snapshot / decision / execution / audit / index / experience 落盘必须经此接口。
 Public API: write_snapshot, write_artifact, write_execution, read_snapshot, read_meta, read_audit,
-get_latest_portfolio_state, get_previous_research_snapshot, get_latest_run_summary, replay_run.
+get_latest_portfolio_state, get_previous_research_snapshot, get_latest_run_summary, replay_run,
+append_run_index, get_recent_runs, get_last_run, append_experience.
 """
 from __future__ import annotations
 
@@ -269,6 +270,51 @@ class RunStore:
     def read_latest_run_id(self) -> str | None:
         runs = self.list_runs(limit=1)
         return runs[0] if runs else None
+
+    # ---------- Run Index (runs/index.json) ----------
+    def _index_path(self) -> Path:
+        return self._root / "index.json"
+
+    def append_run_index(self, run_metadata: dict[str, Any]) -> None:
+        """追加一条运行索引到 runs/index.json。CLI/agent 仅通过此 API 写 index。"""
+        _ensure_dir(self._root)
+        path = self._index_path()
+        entries: list[dict[str, Any]] = []
+        if path.exists():
+            with open(path, encoding="utf-8") as f:
+                raw = json.load(f)
+                entries = raw if isinstance(raw, list) else []
+        entries.append(dict(run_metadata))
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(entries, f, ensure_ascii=False, indent=2)
+
+    def get_recent_runs(self, n: int) -> list[dict[str, Any]]:
+        """返回最近 n 条索引（从新到旧）。"""
+        path = self._index_path()
+        if not path.exists():
+            return []
+        with open(path, encoding="utf-8") as f:
+            entries = json.load(f)
+        if not isinstance(entries, list):
+            return []
+        return list(entries)[-n:][::-1]
+
+    def get_last_run(self) -> dict[str, Any] | None:
+        """返回最近一条索引，无则 None。"""
+        recent = self.get_recent_runs(1)
+        return recent[0] if recent else None
+
+    # ---------- Experience Log (runs/experience.jsonl) ----------
+    def _experience_path(self) -> Path:
+        return self._root / "experience.jsonl"
+
+    def append_experience(self, record: dict[str, Any]) -> None:
+        """追加一条经验记录到 runs/experience.jsonl。CLI/agent 仅通过此 API 写 experience。"""
+        _ensure_dir(self._root)
+        path = self._experience_path()
+        line = json.dumps(record, ensure_ascii=False) + "\n"
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(line)
 
     def run_dir(self, run_id: str) -> Path:
         return self._run_dir(run_id)
