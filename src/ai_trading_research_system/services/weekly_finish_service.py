@@ -71,9 +71,11 @@ def finish_week(
     """
     WeeklyPaperResult = _result_type()
     portfolio_return = total_pnl / capital if capital else 0.0
+    reject_mock = not use_mock  # 联调模式：拒绝 mock，取数失败则 raise
     benchmark_return, benchmark_source = get_benchmark_return(
         symbol=benchmark,
         lookback_days=duration_days,
+        reject_mock=reject_mock,
     )
     if use_mock:
         benchmark_source = "mock"

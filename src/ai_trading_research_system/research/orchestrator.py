@@ -1,4 +1,7 @@
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
+import logging
+import time
 
 from dotenv import load_dotenv
 from pathlib import Path
@@ -17,6 +20,9 @@ from ai_trading_research_system.research.agents.bear_agent import BearThesisAgen
 from ai_trading_research_system.research.agents.uncertainty_agent import UncertaintyAgent
 from ai_trading_research_system.research.agents.synthesis_agent import SynthesisAgent
 from ai_trading_research_system.research.agents.llm_agent import LLMResearchAgent
+
+logger = logging.getLogger(__name__)
+
 
 class ResearchOrchestrator:
     # TODO(phase): TradingAgents 真接入时可通过 adapter 注入 graph，替代当前 agents 列表；见 docs/next_phase_interface.md
@@ -45,20 +51,40 @@ class ResearchOrchestrator:
         self.synthesis = SynthesisAgent()
 
     def build_context(self, symbol: str) -> ResearchContext:
-        # 价格：主数据源为 MarketDataService（IB），research 场景允许 yfinance 补充；mock 时用 data_provider
-        if self.use_mock:
-            price = self.data_provider.get_price(symbol)
-        else:
-            price_snap = get_market_data_service(for_research=True).get_latest_price(symbol)
+        # 并行拉取 price / fundamentals / news，避免 yfinance 串行拖慢（ticker.info / news 常 10–30s）
+        t0 = time.perf_counter()
+        mds = get_market_data_service(for_research=True) if not self.use_mock else None
+
+        def _price() -> "PriceSnapshot":
             from ai_trading_research_system.data.models import PriceSnapshot
-            price = PriceSnapshot(
+            if self.use_mock:
+                p = self.data_provider.get_price(symbol)
+                return PriceSnapshot(symbol=p.symbol, last_price=p.last_price, change_pct=p.change_pct, volume_ratio=p.volume_ratio)
+            snap = mds.get_latest_price(symbol)
+            return PriceSnapshot(
                 symbol=symbol,
-                last_price=price_snap.last_price,
-                change_pct=price_snap.change_pct,
-                volume_ratio=price_snap.volume_ratio,
+                last_price=snap.last_price,
+                change_pct=snap.change_pct,
+                volume_ratio=snap.volume_ratio,
             )
-        fundamentals = self.data_provider.get_fundamentals(symbol)
-        news = self.data_provider.get_news(symbol)
+
+        def _fundamentals():
+            return self.data_provider.get_fundamentals(symbol)
+
+        def _news():
+            return self.data_provider.get_news(symbol)
+
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            fut_price = ex.submit(_price)
+            fut_fund = ex.submit(_fundamentals)
+            fut_news = ex.submit(_news)
+            price = fut_price.result()
+            fundamentals = fut_fund.result()
+            news = fut_news.result()
+
+        ctx_sec = time.perf_counter() - t0
+        if ctx_sec > 5.0:
+            logger.warning("[research] build_context(%s) took %.1fs (price+fundamentals+news)", symbol, ctx_sec)
 
         vol_str = f", volume ratio {price.volume_ratio}" if price.volume_ratio is not None else ""
         price_summary = f"{symbol} last price {price.last_price}, daily change {price.change_pct:.1f}%{vol_str}."
@@ -85,11 +111,17 @@ class ResearchOrchestrator:
 
     def run_with_context(self, symbol: str) -> tuple[ResearchContext, DecisionContract]:
         """Run research and return (context, contract) for reporting (news, price, fundamentals)."""
+        t0 = time.perf_counter()
         context = self.build_context(symbol)
+        t_ctx = time.perf_counter() - t0
         aggregated: dict = defaultdict(list)
 
         for agent in self.agents:
+            ta = time.perf_counter()
             result = agent.run(context)
+            t_agent = time.perf_counter() - ta
+            if t_agent > 10.0:
+                logger.info("[research] %s agent=%s took %.1fs", symbol, getattr(agent, "name", agent.__class__.__name__), t_agent)
             for key, value in result.items():
                 if isinstance(value, list):
                     aggregated[key].extend(value)
@@ -97,4 +129,7 @@ class ResearchOrchestrator:
                     aggregated[key] = value
 
         contract = self.synthesis.run(context, dict(aggregated))
+        total = time.perf_counter() - t0
+        if total > 15.0:
+            logger.info("[research] %s total=%.1fs (context=%.1fs)", symbol, total, t_ctx)
         return context, contract

@@ -2,17 +2,25 @@
 IBKR Paper 客户端：连接 TWS/Gateway，下单（实盘前 L5）。
 依赖 ib_insync；仅当 IBKR_HOST/IBKR_PORT 配置且 run_paper 走 IBKR 路径时使用。
 连接稳定性：使用 IBKR_CONNECT_TIMEOUT、断开后延迟 IBKR_DISCONNECT_DELAY，避免 Gateway 未释放 client id 即重连。
+Snapshot 拆分为 account_summary / positions / open_orders，单独超时与日志，支持部分成功。
 """
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
+from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Gateway 在 disconnect 后不会立即释放 client id，短时间用同一 id 重连易导致 Error 1100 / socket closing
-# 连接+同步（positions/account 等）共用同一 timeout，默认 2 秒过短，改为 60；若仍见 "positions request timed out" 可调大
 _DEFAULT_CONNECT_TIMEOUT = 60
 _DEFAULT_DISCONNECT_DELAY = 1.0  # 断开后等待秒数再返回，便于 Gateway 释放
+_DEFAULT_POSITIONS_TIMEOUT = 45   # positions 请求单独超时（秒），≥10
+_DEFAULT_WARMUP_DELAY = 2.0       # connect 后 1–2s 再请求 snapshot，避免冷启动 timeout
+_POSITIONS_RETRIES = 1           # positions 超时后重试次数
 
 
 def _host_port_client_id(host: str | None, port: int | None, client_id: int):
@@ -34,6 +42,20 @@ def _disconnect_delay() -> float:
         return float(os.environ.get("IBKR_DISCONNECT_DELAY", _DEFAULT_DISCONNECT_DELAY))
     except (ValueError, TypeError):
         return _DEFAULT_DISCONNECT_DELAY
+
+
+def _positions_timeout() -> float:
+    try:
+        return float(os.environ.get("IBKR_POSITIONS_TIMEOUT", _DEFAULT_POSITIONS_TIMEOUT))
+    except (ValueError, TypeError):
+        return _DEFAULT_POSITIONS_TIMEOUT
+
+
+def _warmup_delay() -> float:
+    try:
+        return float(os.environ.get("IBKR_WARMUP_DELAY", _DEFAULT_WARMUP_DELAY))
+    except (ValueError, TypeError):
+        return _DEFAULT_WARMUP_DELAY
 
 
 async def _place_market_buy_async(
@@ -127,6 +149,7 @@ class IBKRAccountSnapshotRaw:
     buying_power: float
     positions: list[dict]
     open_orders: list[dict]
+    failed_steps: list[str] = field(default_factory=list)  # 子步骤失败时记录，如 ["positions"]
 
 
 async def _get_account_snapshot_async(
@@ -134,20 +157,40 @@ async def _get_account_snapshot_async(
     port: int | None = None,
     client_id: int = 1,
 ) -> IBKRAccountSnapshotRaw | None:
-    """从 TWS/Gateway 拉取 paper 账户快照。失败返回 None。"""
+    """从 TWS/Gateway 拉取 paper 账户快照。拆分为 account_summary / positions / open_orders，支持部分成功。"""
     from ib_insync import IB
 
     h, p, cid = _host_port_client_id(host, port, client_id)
     ib = IB()
+    failed_steps: list[str] = []
     try:
+        t_connect_start = time.perf_counter()
         await ib.connectAsync(h, p, clientId=cid, timeout=_connect_timeout())
-        # 兼容：部分 ib_insync 版本有 accountSummaryAsync，否则用 executor 跑同步 accountSummary
+        warmup = _warmup_delay()
+        if warmup > 0:
+            await asyncio.sleep(warmup)
+        logger.info("[ib] IB connection latency=%.2fs", time.perf_counter() - t_connect_start)
+        t_snapshot_start = time.perf_counter()
+        loop = asyncio.get_event_loop()
+        pos_timeout = _positions_timeout()
+        open_orders_timeout = min(30, max(15, int(pos_timeout * 0.5)))
+
+        # --- account_summary ---
+        t0 = time.perf_counter()
+        logger.info("[ib] account_summary start")
         try:
-            summary = await ib.accountSummaryAsync()
-        except AttributeError:
-            loop = asyncio.get_event_loop()
-            summary = await loop.run_in_executor(None, lambda: ib.accountSummary())
-        await asyncio.sleep(0.3)
+            try:
+                summary = await ib.accountSummaryAsync()
+            except AttributeError:
+                summary = await loop.run_in_executor(None, lambda: ib.accountSummary())
+            await asyncio.sleep(0.05)
+        except Exception as e:
+            logger.warning("[ib] account_summary failed: %s", e)
+            failed_steps.append("account_summary")
+            summary = []
+        elapsed = time.perf_counter() - t0
+        logger.info("[ib] account_summary end (latency=%.2fs)", elapsed)
+
         cash = 0.0
         equity = 0.0
         buying_power = 0.0
@@ -174,36 +217,85 @@ async def _get_account_snapshot_async(
                     pass
         if equity == 0.0 and cash != 0.0:
             equity = cash
-        # Positions
-        positions: list[dict] = []
-        for pos in ib.positions():
-            sym = getattr(pos.contract, "symbol", None) or ""
-            qty = float(pos.position)
-            avg_cost = float(pos.avgCost) if pos.avgCost else 0.0
-            market_value = qty * avg_cost if avg_cost else 0.0
-            positions.append({"symbol": sym, "quantity": qty, "market_value": market_value})
-        # Open orders
+
+        # --- positions（timeout≥10s，超时 retry 1 次）---
+        t1 = time.perf_counter()
+        logger.info("[ib] positions start")
+        positions = await _fetch_positions_client(ib, loop, pos_timeout)
+        if positions is None:
+            logger.info("[ib] positions retry 1")
+            positions = await _fetch_positions_client(ib, loop, pos_timeout)
+        if positions is None:
+            failed_steps.append("positions")
+        logger.info("[ib] positions end (latency=%.2fs)", time.perf_counter() - t1)
+        positions = positions if positions is not None else []
+
+        # --- open_orders ---
         open_orders: list[dict] = []
-        for t in ib.openTrades():
-            if t.orderStatus.status in ("PendingSubmit", "PreSubmitted", "Submitted", "ApiPending"):
-                open_orders.append({
-                    "symbol": getattr(t.contract, "symbol", ""),
-                    "side": "BUY" if "BUY" in str(t.order.action) else "SELL",
-                    "quantity": float(t.order.totalQuantity or 0),
-                    "status": t.orderStatus.status,
-                })
+        t2 = time.perf_counter()
+        logger.info("[ib] open_orders start")
+        try:
+            raw_trades = await asyncio.wait_for(
+                loop.run_in_executor(None, lambda: list(ib.openTrades())),
+                timeout=open_orders_timeout,
+            )
+            for t in raw_trades:
+                if t.orderStatus.status in ("PendingSubmit", "PreSubmitted", "Submitted", "ApiPending"):
+                    open_orders.append({
+                        "symbol": getattr(t.contract, "symbol", ""),
+                        "side": "BUY" if "BUY" in str(t.order.action) else "SELL",
+                        "quantity": float(t.order.totalQuantity or 0),
+                        "status": t.orderStatus.status,
+                    })
+        except asyncio.TimeoutError:
+            logger.warning("[ib] open_orders timed out (timeout=%.0fs)", open_orders_timeout)
+            failed_steps.append("open_orders")
+        except Exception as e:
+            logger.warning("[ib] open_orders failed: %s", e)
+            failed_steps.append("open_orders")
+        logger.info("[ib] open_orders end (latency=%.2fs)", time.perf_counter() - t2)
+
+        # 至少 account_summary 成功即返回；positions 失败时 partial_real，不 fallback mock
+        if "account_summary" in failed_steps and equity == 0.0 and cash == 0.0:
+            return None
+        logger.info("[ib] account snapshot total latency=%.2fs", time.perf_counter() - t_snapshot_start)
         return IBKRAccountSnapshotRaw(
             cash=cash,
             equity=equity,
             buying_power=buying_power,
             positions=positions,
             open_orders=open_orders,
+            failed_steps=failed_steps,
         )
-    except Exception:
+    except Exception as e:
+        logger.warning("IB snapshot: connect or overall failed: %s", e)
         return None
     finally:
         ib.disconnect()
         await asyncio.sleep(_disconnect_delay())
+
+
+async def _fetch_positions_client(ib: Any, loop: asyncio.AbstractEventLoop, pos_timeout: float) -> list[dict] | None:
+    """拉取 positions，超时或异常返回 None。timeout 至少 10s。"""
+    try:
+        raw = await asyncio.wait_for(
+            loop.run_in_executor(None, lambda: list(ib.positions())),
+            timeout=max(10.0, pos_timeout),
+        )
+        out = []
+        for pos in raw:
+            sym = getattr(pos.contract, "symbol", None) or ""
+            qty = float(pos.position)
+            avg_cost = float(pos.avgCost) if pos.avgCost else 0.0
+            market_value = qty * avg_cost if avg_cost else 0.0
+            out.append({"symbol": sym, "quantity": qty, "market_value": market_value})
+        return out
+    except asyncio.TimeoutError:
+        logger.warning("[ib] positions request timed out (timeout=%.0fs)", max(10.0, pos_timeout))
+        return None
+    except Exception as e:
+        logger.warning("[ib] positions failed: %s", e)
+        return None
 
 
 def get_ibkr_account_snapshot_raw(
@@ -212,14 +304,25 @@ def get_ibkr_account_snapshot_raw(
     client_id: int = 1,
     retries: int = 2,
 ) -> IBKRAccountSnapshotRaw | None:
-    """同步封装：拉取 IBKR 账户快照。若有 IBKRSession 复用则用单连接；否则每次建连（支持重试）。"""
+    """同步封装：拉取 IBKR 账户快照。若有 IBKRSession 复用则仅用该连接，绝不再用同一 clientId 建第二连接。"""
     try:
         from ai_trading_research_system.execution.ibkr_session import get_ibkr_session
         session = get_ibkr_session()
+        if session is None:
+            logger.warning("[ib] no session in context, snapshot will try standalone connect or fallback")
         if session is not None:
-            return session.get_account_snapshot_raw()
-    except Exception:
-        pass
+            out = session.get_account_snapshot_raw()
+            if out is None:
+                logger.warning("[ib] session snapshot returned None (timeout or failure), snapshot will use fallback")
+            return out  # 有 session 时只走这一条路，返回 None 也不 fallback，避免 clientId 重复连接
+    except Exception as e:
+        logger.debug("get_ibkr_account_snapshot_raw (session): %s", e)
+        try:
+            from ai_trading_research_system.execution.ibkr_session import get_ibkr_session
+            if get_ibkr_session() is not None:
+                return None  # session 存在但调用失败，不尝试新连接，否则会触发 Error 326
+        except Exception:
+            pass
     last_err: Exception | None = None
     for attempt in range(max(1, retries + 1)):
         try:
@@ -228,7 +331,7 @@ def get_ibkr_account_snapshot_raw(
                 return out
         except Exception as e:
             last_err = e
+            logger.debug("get_ibkr_account_snapshot_raw attempt %s: %s", attempt + 1, e)
         if attempt < retries:
-            import time
             time.sleep(2.0)
     return None

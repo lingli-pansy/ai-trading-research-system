@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +25,15 @@ from ai_trading_research_system.presentation.renderers import render
 
 if load_dotenv:
     load_dotenv(Path.cwd() / ".env")
+
+
+def _init_logging() -> None:
+    """根据环境变量 LOG_LEVEL 初始化日志，便于看到 [ib] 等 INFO 日志。"""
+    level_name = (os.environ.get("LOG_LEVEL") or "").strip().upper()
+    level = logging.INFO if level_name == "INFO" else (logging.DEBUG if level_name == "DEBUG" else logging.WARNING)
+    if level != logging.WARNING:
+        from ai_trading_research_system.utils.logging import setup_logging
+        setup_logging(level=level)
 
 
 def _json_serial(obj: object) -> str | float | int | None:
@@ -87,6 +98,7 @@ def main() -> int:
                 print(line)
         return 0
 
+    _init_logging()
     kwargs = kwargs_from_cli_args(args.command, args)
     result = command_run(args.command, **kwargs)
 

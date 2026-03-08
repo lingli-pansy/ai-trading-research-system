@@ -33,22 +33,28 @@ def get_account_snapshot(
 
         raw = get_ibkr_account_snapshot_raw()
         if raw is not None:
+            # 仅当 account_summary 与 positions 都不可用时才 fallback mock；部分可得则用 partial_real
+            failed = getattr(raw, "failed_steps", []) or []
+            source = "ibkr" if not failed else "partial_real"
             risk_budget = raw.equity * 0.02 if raw.equity else (raw.cash * 0.02)
             return AccountSnapshot(
                 cash=raw.cash,
                 equity=raw.equity,
-                positions=raw.positions,
-                open_orders=raw.open_orders,
+                positions=raw.positions or [],
+                open_orders=raw.open_orders or [],
                 risk_budget=risk_budget,
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 buying_power=raw.buying_power,
-                source="ibkr",
+                source=source,
             )
 
     if allow_fallback:
         return _mock_account_snapshot(initial_cash=initial_cash)
 
-    return _mock_account_snapshot(initial_cash=initial_cash)
+    raise RuntimeError(
+        "Reject mock: account snapshot from IB required. "
+        "Check IBKR_HOST/IBKR_PORT, Gateway/TWS, and connection; or run with --mock for local testing."
+    )
 
 
 def _mock_account_snapshot(initial_cash: float = 10_000.0) -> AccountSnapshot:

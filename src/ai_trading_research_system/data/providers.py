@@ -36,9 +36,10 @@ class YFinanceProvider:
             ticker = yf.Ticker(symbol)
             hist = ticker.history(period="5d")
         except Exception as e:
+            if _is_rate_limit(e):
+                print("yfinance rate limited; using mock price for this symbol. Suggestion: wait a few minutes and retry, or run with --mock for local testing.", file=sys.stderr)
+                return _fallback_price(symbol)
             if not self.fallback_to_mock:
-                if _is_rate_limit(e):
-                    print("Suggestion: wait a few minutes and retry, or run with --mock for local testing.", file=sys.stderr)
                 raise
             print(f"Warning: yfinance request failed ({e}), using mock price for {symbol}.", file=sys.stderr)
             return _fallback_price(symbol)
@@ -65,9 +66,10 @@ class YFinanceProvider:
                 volume_ratio=round(volume_ratio, 2) if volume_ratio is not None else None,
             )
         except Exception as e:
+            if _is_rate_limit(e):
+                print("yfinance rate limited; using mock price for this symbol. Suggestion: wait a few minutes and retry, or run with --mock for local testing.", file=sys.stderr)
+                return _fallback_price(symbol)
             if not self.fallback_to_mock:
-                if _is_rate_limit(e):
-                    print("Suggestion: wait a few minutes and retry, or run with --mock for local testing.", file=sys.stderr)
                 raise
             print(f"Warning: yfinance parse failed ({e}), using mock price for {symbol}.", file=sys.stderr)
             return _fallback_price(symbol)
@@ -103,9 +105,10 @@ class YFinanceProvider:
                 notes=notes or None,
             )
         except Exception as e:
+            if _is_rate_limit(e):
+                print("yfinance rate limited; using mock fundamentals for this symbol. Suggestion: wait a few minutes and retry, or run with --mock for local testing.", file=sys.stderr)
+                return _mock_fundamentals(symbol)
             if not self.fallback_to_mock:
-                if _is_rate_limit(e):
-                    print("Suggestion: wait a few minutes and retry, or run with --mock for local testing.", file=sys.stderr)
                 raise
             print(f"Warning: yfinance fundamentals failed ({e}), using mock for {symbol}.", file=sys.stderr)
             return _mock_fundamentals(symbol)
@@ -148,9 +151,10 @@ class YFinanceProvider:
                 return _mock_news(symbol)
             return out
         except Exception as e:
+            if _is_rate_limit(e):
+                print("yfinance rate limited; using mock news for this symbol. Suggestion: wait a few minutes and retry, or run with --mock for local testing.", file=sys.stderr)
+                return _mock_news(symbol)
             if not self.fallback_to_mock:
-                if _is_rate_limit(e):
-                    print("Suggestion: wait a few minutes and retry, or run with --mock for local testing.", file=sys.stderr)
                 raise
             print(f"Warning: yfinance news failed ({e}), using mock for {symbol}.", file=sys.stderr)
             return _mock_news(symbol)

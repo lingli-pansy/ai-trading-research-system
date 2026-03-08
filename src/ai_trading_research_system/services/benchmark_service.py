@@ -17,13 +17,16 @@ def get_benchmark_return(
     start_date: str | None = None,
     end_date: str | None = None,
     lookback_days: int = 5,
+    *,
+    reject_mock: bool = False,
 ) -> tuple[float, str]:
-    """Return (benchmark_return_decimal, source). Source is 'ib' or 'mock'."""
+    """Return (benchmark_return_decimal, source). Source is 'ib' or 'mock'. reject_mock=True 时取数失败则 raise。"""
     return get_benchmark_return_for_period(
         symbol=symbol,
         start_date=start_date,
         end_date=end_date,
         lookback_days=lookback_days,
+        reject_mock=reject_mock,
     )
 
 

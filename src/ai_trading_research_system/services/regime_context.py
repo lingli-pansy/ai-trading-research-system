@@ -4,7 +4,12 @@ Regime context for Experience Store: spy_trend, vix_level.
 """
 from __future__ import annotations
 
+import logging
+import time
+
 from ai_trading_research_system.data.market_data_service import get_market_data_service
+
+logger = logging.getLogger(__name__)
 
 
 def get_regime_context(use_mock: bool = False) -> tuple[str, str]:
@@ -16,6 +21,7 @@ def get_regime_context(use_mock: bool = False) -> tuple[str, str]:
     """
     if use_mock:
         return "sideways", "medium"
+    t0 = time.perf_counter()
     mds = get_market_data_service(for_research=False)
     # SPY
     spy_bars = mds.get_history("SPY", 5)
@@ -35,4 +41,6 @@ def get_regime_context(use_mock: bool = False) -> tuple[str, str]:
         vix_level = "high" if level > 25 else ("low" if level < 18 else "medium")
     else:
         vix_level = "medium"
+    elapsed = time.perf_counter() - t0
+    logger.info("[ib] regime context latency=%.2fs", elapsed)
     return spy_trend, vix_level

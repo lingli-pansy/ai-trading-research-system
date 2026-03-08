@@ -4,6 +4,7 @@ UC-09 Weekly Autonomous Paper: 一周自治 paper 编排（controller only）。
 """
 from __future__ import annotations
 
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -102,23 +103,42 @@ def run_weekly_autonomous_paper(
                 get_ibkr_session,
                 _ibkr_configured,
             )
-            if _ibkr_configured():
+            if not _ibkr_configured():
+                _progress("(IB not configured: set IBKR_HOST/IBKR_PORT to enable session reuse)")
+            else:
                 ib_session = IBKRSession(client_id=1)
                 _progress("Connecting to IB (single session for this run)...")
                 if ib_session.connect():
                     set_ibkr_session(ib_session)
                     _progress("IB session connected, reusing for account & market data.")
                 else:
+                    _progress("(IB connect failed, snapshot will use standalone connect)")
                     ib_session = None
-        except Exception:
+        except Exception as e:
+            _progress("(IB session setup failed: %s)" % (e,))
             ib_session = None
 
     try:
         sm = AutonomousExecutionStateMachine()
         sm.start()
         _progress("Getting account snapshot...")
-        snapshot = get_account_snapshot(paper=True, mock=use_mock, initial_cash=capital, allow_fallback=True)
+        if not use_mock:
+            try:
+                from ai_trading_research_system.execution.ibkr_session import get_ibkr_session
+                _progress("(IB session in context: %s)" % (get_ibkr_session() is not None))
+            except Exception:
+                _progress("(IB session in context: False)")
+        # 联调模式：use_mock=False 或 AI_TRADING_REJECT_MOCK=1 时拒绝 snapshot 回退到 mock
+        reject_mock = not use_mock or (os.environ.get("AI_TRADING_REJECT_MOCK", "").strip() == "1")
+        snapshot = get_account_snapshot(
+            paper=True,
+            mock=use_mock,
+            initial_cash=capital,
+            allow_fallback=not reject_mock,
+        )
         _progress(f"Account snapshot: source={snapshot.source}, equity={snapshot.equity:.0f}.")
+        if not use_mock and snapshot.source == "mock":
+            _progress("(IB snapshot failed or timed out; check [ib] logs or set LOG_LEVEL=INFO)")
         allocator = PortfolioAllocator(max_position_pct=0.25)
         ranker = OpportunityRanking()
         orchestrator = ResearchOrchestrator(use_mock=use_mock, use_llm=use_llm)
@@ -147,22 +167,36 @@ def run_weekly_autonomous_paper(
         for day in range(duration_days):
             _progress(f"Day {day + 1}/{duration_days}: researching {len(symbols_list)} symbols...")
             contracts_for_day: list[tuple[str, Any, Any]] = []
+            # 并行研究多个 symbol，缩短墙钟时间（Kimi 单次 ~30–60s，串行 3 个会 ~3 分钟）
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            sym_to_pending = {
+                sym: (recorded_research_by_symbol.get(sym) if recorded_research_by_symbol else None)
+                for sym in symbols_list
+            }
+            results_by_sym: dict[str, tuple[Any, Any]] = {}
+            with ThreadPoolExecutor(max_workers=max(len(symbols_list), 1)) as ex:
+                def _research(sym: str):
+                    rec = sym_to_pending.get(sym)
+                    if rec is not None and rec:
+                        c = DecisionContract(
+                            symbol=sym,
+                            thesis=rec.get("research_thesis", ""),
+                            key_drivers=list(rec.get("research_key_drivers", []) or []),
+                            risk_flags=list(rec.get("research_risk_factors", []) or []),
+                            confidence="medium",
+                            suggested_action="allow_entry",
+                        )
+                        ctx = ResearchContext(symbol=sym, price_summary="", fundamentals_summary="", news_summaries=[])
+                        return sym, ctx, c
+                    ctx, c = orchestrator.run_with_context(sym)
+                    return sym, ctx, c
+                futs = [ex.submit(_research, sym) for sym in symbols_list]
+                for fut in as_completed(futs):
+                    sym, context, contract = fut.result()
+                    results_by_sym[sym] = (context, contract)
             for sym in symbols_list:
-                if recorded_research_by_symbol and sym in recorded_research_by_symbol:
-                    rec = recorded_research_by_symbol.get(sym) or {}
-                    contract = DecisionContract(
-                        symbol=sym,
-                        thesis=rec.get("research_thesis", ""),
-                        key_drivers=list(rec.get("research_key_drivers", []) or []),
-                        risk_flags=list(rec.get("research_risk_factors", []) or []),
-                        confidence="medium",
-                        suggested_action="allow_entry",
-                    )
-                    context = ResearchContext(symbol=sym, price_summary="", fundamentals_summary="", news_summaries=[])
-                    contracts_for_day.append((sym, context, contract))
-                else:
-                    context, contract = orchestrator.run_with_context(sym)
-                    contracts_for_day.append((sym, context, contract))
+                context, contract = results_by_sym[sym]
+                contracts_for_day.append((sym, context, contract))
                 daily_research.append({
                     "day": day,
                     "symbol": sym,

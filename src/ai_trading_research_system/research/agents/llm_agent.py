@@ -25,6 +25,18 @@ def _default_evidence() -> dict[str, Any]:
     }
 
 
+def _llm_timeout() -> float:
+    """KIMI_TIMEOUT 或 OPENAI_TIMEOUT（秒），默认 60。"""
+    for key in ("KIMI_TIMEOUT", "OPENAI_TIMEOUT"):
+        v = os.environ.get(key, "").strip()
+        if v:
+            try:
+                return float(v)
+            except (ValueError, TypeError):
+                pass
+    return 60.0
+
+
 def _llm_client_and_model() -> tuple[Any, str] | None:
     """Return (OpenAI client, model_name) for OPENAI or Kimi (KIMI_CODE_API_KEY / KIMI_API_KEY)."""
     openai_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
@@ -33,14 +45,16 @@ def _llm_client_and_model() -> tuple[Any, str] | None:
     if not api_key:
         return None
     from openai import OpenAI
+    timeout = _llm_timeout()
     if kimi_key and not openai_key:
         # KimiCode（Kimi 编程产品）：api.kimi.com/coding/v1，模型 k2p5；服务端按 User-Agent 白名单放行（参考 OpenClaw/CLIProxyAPI）
         base_url = (os.environ.get("KIMI_BASE_URL") or "https://api.kimi.com/coding/v1").strip()
         model = (os.environ.get("KIMI_MODEL") or "k2p5").strip()
         ua = (os.environ.get("KIMI_USER_AGENT") or "KimiCLI/1.3").strip()
-        return OpenAI(api_key=api_key, base_url=base_url, default_headers={"User-Agent": ua}), model
+        client = OpenAI(api_key=api_key, base_url=base_url, default_headers={"User-Agent": ua}, timeout=timeout)
+        return client, model
     model = (os.environ.get("OPENAI_RESEARCH_MODEL") or "gpt-4o-mini").strip()
-    return OpenAI(api_key=api_key), model
+    return OpenAI(api_key=api_key, timeout=timeout), model
 
 
 class LLMResearchAgent:

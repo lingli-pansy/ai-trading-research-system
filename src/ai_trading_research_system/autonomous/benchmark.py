@@ -4,9 +4,13 @@ BenchmarkComparator：自动对比组合收益与 benchmark（默认 SPY）。
 """
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass
 
 from ai_trading_research_system.data.market_data_service import get_market_data_service
+
+logger = logging.getLogger(__name__)
 
 
 def get_benchmark_return_for_period(
@@ -14,11 +18,15 @@ def get_benchmark_return_for_period(
     start_date: str | None = None,
     end_date: str | None = None,
     lookback_days: int = 5,
+    *,
+    reject_mock: bool = False,
 ) -> tuple[float, str]:
     """
     用 MarketDataService（IB Gateway）计算 benchmark 在给定区间的收益率。
     返回 (return_pct_as_decimal, source)，source 为 "ib" 或 "mock"（取数失败时 return=0）。
+    reject_mock=True 时取数失败则 raise，不返回 mock。
     """
+    t0 = time.perf_counter()
     mds = get_market_data_service(for_research=False)
     returns, total_return, _, _ = mds.get_benchmark_series(
         symbol=symbol,
@@ -27,7 +35,14 @@ def get_benchmark_return_for_period(
         end_date=end_date,
         use_cache=True,
     )
+    logger.info("[ib] benchmark latency=%.2fs", time.perf_counter() - t0)
     source = "ib" if returns else "mock"
+    if reject_mock and not returns:
+        raise RuntimeError(
+            "Reject mock: benchmark data from IB required. "
+            "Check IB Gateway and historical data for %s; or run with --mock for local testing."
+            % symbol
+        )
     return total_return, source
 
 
@@ -42,14 +57,17 @@ def get_benchmark_series(
     返回 (daily_returns, total_return, volatility_annualized, max_drawdown)。
     取数失败时返回 ([], 0.0, 0.0, 0.0)。
     """
+    t0 = time.perf_counter()
     mds = get_market_data_service(for_research=False)
-    return mds.get_benchmark_series(
+    out = mds.get_benchmark_series(
         symbol=symbol,
         lookback_days=lookback_days,
         start_date=start_date,
         end_date=end_date,
         use_cache=True,
     )
+    logger.info("[ib] benchmark latency=%.2fs", time.perf_counter() - t0)
+    return out
 
 
 @dataclass

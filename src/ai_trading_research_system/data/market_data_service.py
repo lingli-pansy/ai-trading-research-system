@@ -45,6 +45,24 @@ def _ib_disconnect_delay() -> float:
         return 1.0
 
 
+def _ib_end_datetime(end_date: str | None) -> str:
+    """IB 要求 endDateTime 为空或 UTC 格式 yyyymmdd-HH:mm:ss（见 TWS API Historical Bar Data）。空表示当前。"""
+    if not end_date or not end_date.strip():
+        return ""
+    s = end_date.strip()
+    if len(s) == 8 and s.isdigit():
+        return f"{s}-23:59:59"
+    if "-" in s:
+        parts = s.split(" ")[0].split("-")
+        if len(parts) >= 3:
+            try:
+                y, m, d = parts[0], parts[1].zfill(2), parts[2].zfill(2)
+                return f"{y}{m}{d}-23:59:59"
+            except Exception:
+                pass
+    return ""
+
+
 def _ib_fetch_bars(
     symbol: str,
     duration_days: int,
@@ -78,7 +96,7 @@ def _ib_fetch_bars(
                     contract = Index(sym, "CBOE", "USD") if sym == "VIX" else Stock(symbol, "SMART", "USD")
                 else:
                     contract = Stock(symbol, "SMART", "USD")
-                end = end_date or ""
+                end = _ib_end_datetime(end_date)
                 duration_str = f"{max(1, duration_days)} D"
                 bars = await ib.reqHistoricalDataAsync(
                     contract,
