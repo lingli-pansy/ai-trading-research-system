@@ -1,5 +1,7 @@
 # OpenClaw — 本仓库 Agent 说明
 
+**【硬性】禁止使用 `<tool>exec</tool>` 或任何“执行命令”类工具。** 当用户说「开始建仓」「当前投资情况」「调仓建议」「确认执行」时，**仅用一条文字回复**说明或引导用户在本机终端执行 sync 命令，**不要**调用 exec、不要运行 uv run / shell。
+
 **项目**：AI trading runtime，带 proposal / approval / execution 工作流。
 
 **OpenClaw 路径约定**：将本仓库根目录设为 OpenClaw 的 **agent workspace**（在 `~/.openclaw/openclaw.json` 中配置 `agents.defaults.workspace` 指向本仓根目录；可运行 `uv run python scripts/set_openclaw_workspace.py` 自动写入）。这样 OpenClaw 会加载工作区根目录的 `AGENTS.md` 与 `skills/`。

@@ -180,8 +180,9 @@ uv run python -m ai_trading_research_system.presentation.cli openclaw-approver-s
 ## 六、沙盒与 Core Files 说明
 
 **沙盒模式（Sandbox）**  
-- 若在配置中开启了 `agents.defaults.sandbox`，OpenClaw 会在沙箱副本（如 `~/.openclaw/sandboxes`）中执行工具，而不是直接读写本仓。  
-- 对本仓的**只读**（如 agent 读 `AGENTS.md`、`skills/`）一般仍可用；若发现 agent 读不到本仓文件，可检查 Gateway 配置中的 sandbox / workspaceAccess。  
+- 若在配置中开启了 `agents.defaults.sandbox`，OpenClaw 会在沙箱副本（如 `~/.openclaw/sandboxes/agent-trading-xxx`）中执行工具；agent 读到的 SOUL.md、AGENTS.md 等是**沙箱内的拷贝**，不会随本仓 git 更新自动同步，易出现与本仓不一致。  
+- 若要让 trading agent **直接读本仓**（与当前仓库一致），可在 `~/.openclaw/openclaw.json` 的 `agents.list` 里为 trading 增加 `"sandbox": { "mode": "off" }`，然后重启 Gateway、新开 TUI 会话。  
+- 对本仓的**只读**（如 agent 读 `AGENTS.md`、`skills/`）在 sandbox 下一般仍可用，但内容以沙箱拷贝为准；关掉 sandbox 后则直接读 workspace 路径。  
 - 本仓仅作 proposal approver，不依赖沙箱内写文件，通常**不开启沙箱也可用**。
 
 **应用新 agent（trading）而不是 main**  
