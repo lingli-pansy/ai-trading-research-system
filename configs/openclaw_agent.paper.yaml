@@ -10,7 +10,7 @@ capital: 10000
 benchmark: SPY
 interval_seconds: 300
 mode: paper
-use_mock: true
+use_mock: false
 use_llm: false
 
 # Risk policy（与 pipeline 内 RiskPolicyEngine 默认一致；此处作记录与未来扩展）

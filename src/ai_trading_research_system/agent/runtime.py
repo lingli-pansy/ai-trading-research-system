@@ -94,7 +94,12 @@ class AutonomousTradingAgent:
         )
 
         store = self._store_ref()
-        portfolio_state = store.get_latest_portfolio_state(use_mock=self.use_mock)
+        # 真实 paper 时：仅当存在本地 portfolio_after 时用作 override，否则传 None 由 cycle 内用已建 session 拉 snapshot，避免重复连接
+        if self.use_mock:
+            portfolio_state = store.get_latest_portfolio_state(use_mock=True)
+        else:
+            rid = store.read_latest_run_id()
+            portfolio_state = store.read_snapshot(rid, "portfolio_after") if rid else None
         last_meta = store.get_last_run()
         symbols = self.symbols
         if last_meta and last_meta.get("symbols"):

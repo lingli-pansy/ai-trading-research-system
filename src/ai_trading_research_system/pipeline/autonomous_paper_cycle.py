@@ -616,7 +616,7 @@ def run_autonomous_paper_cycle(
         proposal = _build_proposal(
             run_id, filtered_plan, check_result, _snapshot_to_dict(snap), store,
         )
-        store.write_proposal(proposal.to_dict())
+        store.write_proposal(run_id, proposal.to_dict())
         paths["approval_request"] = store.path_for_artifact(run_id, "approval_request")
         audit("proposal_created", {"proposal_summary": proposal.proposal_summary})
 
@@ -651,7 +651,7 @@ def run_autonomous_paper_cycle(
                 reason="no_callback",
                 timestamp=datetime.now(timezone.utc).isoformat(),
             )
-        store.write_approval_decision(decision.to_dict())
+        store.write_approval_decision(run_id, decision.to_dict())
         paths["approval_decision"] = store.path_for_artifact(run_id, "approval_decision")
         audit("approval_decision", {"decision": decision.decision, "reviewer": decision.reviewer})
 
