@@ -49,6 +49,16 @@ def approve_proposal(
     )
 
 
+def load_agent_context(run_id: str, runs_root: Path | None = None) -> dict[str, Any] | None:
+    """
+    读取 runs/<run_id>/artifacts/agent_context.json，供 OpenClaw/LLM 审批时作为 prompt context。
+    在调用 approval decision 前可调用此函数获取完整上下文。
+    """
+    store = get_run_store(root=runs_root)
+    ctx = store.read_artifact(run_id, "agent_context")
+    return ctx if isinstance(ctx, dict) else None
+
+
 def create_openclaw_agent(config: OpenClawAgentConfig) -> AutonomousTradingAgent:
     """
     根据 OpenClawAgentConfig 创建 AutonomousTradingAgent 实例。
@@ -73,7 +83,9 @@ def run_openclaw_agent_once(config: OpenClawAgentConfig) -> dict[str, Any]:
     agent = create_openclaw_agent(config)
     summary = agent.run_once()
     store = get_run_store(root=config.runs_root)
-    run_path = str(store.run_dir(summary["run_id"])) if summary.get("run_id") else ""
+    run_id = summary.get("run_id", "")
+    run_path = str(store.run_dir(run_id)) if run_id else ""
+    agent_context = load_agent_context(run_id, config.runs_root)
 
     # 结构化输出
     portfolio_before_summary: dict[str, Any] = {
@@ -102,6 +114,7 @@ def run_openclaw_agent_once(config: OpenClawAgentConfig) -> dict[str, Any]:
         "agent_name": config.name,
         "symbols": config.symbols,
         "approval_decision": summary.get("approval_decision", "") or "approve",
+        "agent_context": agent_context,
     }
 
 

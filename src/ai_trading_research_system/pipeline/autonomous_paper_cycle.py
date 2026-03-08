@@ -399,6 +399,54 @@ def _build_opportunity_ranking(
     return {"symbols": symbols_list}
 
 
+def _build_agent_context(
+    run_id: str,
+    portfolio_before_dict: dict[str, Any],
+    risk_flags: list[str],
+    proposal_summary: list[str],
+    selection_reason: list[dict[str, Any]],
+    opportunity_ranking_data: dict[str, Any],
+    store: RunStore,
+    recent_n: int = 3,
+) -> dict[str, Any]:
+    """构建 agent_context.json：portfolio_summary, risk_flags, proposal_summary, top_opportunities, recent_runs。"""
+    equity = float(portfolio_before_dict.get("equity") or portfolio_before_dict.get("equity_estimate") or portfolio_before_dict.get("cash") or 0)
+    cash = float(portfolio_before_dict.get("cash") or 0)
+    positions_raw = portfolio_before_dict.get("positions") or []
+    positions: dict[str, float] = {}
+    for p in positions_raw:
+        sym = p.get("symbol")
+        if sym:
+            w = _current_weight(p, equity) if equity else 0.0
+            positions[sym] = round(w, 4)
+    portfolio_summary = {
+        "equity": equity,
+        "cash": cash,
+        "positions": positions,
+        "exposure": dict(positions),
+    }
+    symbols_list = opportunity_ranking_data.get("symbols") or []
+    sorted_symbols = sorted(symbols_list, key=lambda s: float(s.get("research_score", 0)), reverse=True)
+    top_5 = sorted_symbols[:5]
+    top_opportunities = [f"{s['symbol']} score={s.get('research_score', 0)} {s.get('allocator_decision', 'skip')}" for s in top_5]
+    recent_runs = []
+    for r in store.get_recent_runs(recent_n):
+        recent_runs.append({
+            "run_id": r.get("run_id", ""),
+            "decision_summary": (r.get("decision_summary") or "")[:120],
+            "timestamp": r.get("timestamp", ""),
+        })
+    return {
+        "run_id": run_id,
+        "portfolio_summary": portfolio_summary,
+        "risk_flags": list(risk_flags),
+        "proposal_summary": list(proposal_summary),
+        "selection_reason": list(selection_reason),
+        "top_opportunities": top_opportunities,
+        "recent_runs": recent_runs,
+    }
+
+
 def _build_proposal(
     run_id: str,
     filtered_plan: RebalancePlan,
@@ -750,6 +798,19 @@ def run_autonomous_paper_cycle(
         paths["approval_request"] = store.path_for_artifact(run_id, "approval_request")
         audit("proposal_created", {"proposal_summary": proposal.proposal_summary})
 
+        agent_context = _build_agent_context(
+            run_id,
+            _snapshot_to_dict(snap),
+            check_result.risk_flags,
+            proposal.proposal_summary,
+            proposal_dict.get("selection_reason", []),
+            opportunity_ranking_data,
+            store,
+            recent_n=3,
+        )
+        store.write_artifact(run_id, "agent_context", agent_context)
+        paths["agent_context"] = store.path_for_artifact(run_id, "agent_context")
+
         if input_.proposal_only:
             return CycleOutput(
                 ok=True,
@@ -764,15 +825,9 @@ def run_autonomous_paper_cycle(
                 risk_flags=check_result.risk_flags,
             )
 
-        # 4.7) 获取 ApprovalDecision（callback 或 auto-approve）
+        # 4.7) 获取 ApprovalDecision（callback 或 auto-approve）；context 使用 agent_context 供 OpenClaw/LLM 审批
         if input_.approval_callback is not None:
-            context = {
-                "proposal_summary": proposal.proposal_summary,
-                "risk_flags": proposal.risk_flags,
-                "recent_runs": proposal.recent_experience_summary,
-                "portfolio_exposure": proposal.portfolio_exposure,
-            }
-            decision = input_.approval_callback(proposal, context)
+            decision = input_.approval_callback(proposal, agent_context)
         else:
             decision = ApprovalDecision(
                 run_id=run_id,

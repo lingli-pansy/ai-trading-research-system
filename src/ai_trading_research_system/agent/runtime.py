@@ -146,6 +146,10 @@ class AutonomousTradingAgent:
                 score = s.get("research_score", 0)
                 dec = s.get("allocator_decision", "skip")
                 top_opportunities_lines.append(f"{sym} score={score} {dec}")
+        agent_context = store.read_artifact(run_id, "agent_context")
+        portfolio_summary_for_display: dict[str, Any] = {}
+        if isinstance(agent_context, dict) and "portfolio_summary" in agent_context:
+            portfolio_summary_for_display = agent_context.get("portfolio_summary") or {}
 
         index_entry = RunIndexEntry(
             run_id=run_id,
@@ -189,6 +193,7 @@ class AutonomousTradingAgent:
             "risk_flags": risk_flags,
             "approval_decision": approval_decision,
             "top_opportunities_lines": top_opportunities_lines,
+            "portfolio_summary": portfolio_summary_for_display,
         }
 
     def run_loop(
@@ -261,8 +266,16 @@ def format_run_observability(summary: dict[str, Any]) -> str:
     risk_flags = summary.get("risk_flags") or []
     approval = summary.get("approval_decision", "") or "approve"
     top_opportunities = summary.get("top_opportunities_lines") or []
+    portfolio_summary = summary.get("portfolio_summary") or {}
+    equity_ctx = portfolio_summary.get("equity") or before
+    cash_ctx = portfolio_summary.get("cash")
+    portfolio_line = f"PORTFOLIO equity={equity_ctx:.0f}"
+    if cash_ctx is not None:
+        portfolio_line += f" cash={cash_ctx:.0f}"
     parts = [
         f"RUN {run_id}",
+        "CONTEXT",
+        portfolio_line,
         "TOP_OPPORTUNITIES",
         *(top_opportunities if top_opportunities else ["(no opportunity_ranking)"]),
         "PROPOSAL",
