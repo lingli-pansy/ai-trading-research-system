@@ -11,6 +11,7 @@ from ai_trading_research_system.openclaw.agent_adapter import (
     create_openclaw_agent,
     run_openclaw_agent_once,
     build_openclaw_context_summary,
+    build_approver_prompt_input,
     parse_approval_decision,
 )
 
@@ -30,6 +31,42 @@ def test_parse_approval_decision() -> None:
     assert parse_approval_decision("wait") == "defer"
     assert parse_approval_decision("") == "defer"
     assert parse_approval_decision("unknown text") == "defer"
+
+
+def test_approver_integration_smoke_prompt_input_to_normalized_decision() -> None:
+    """
+    联调 smoke：给定最小 agent_context + recommendation，当 approver 输出自然语言时，
+    系统能稳定得到 normalized decision。不调 LLM，只测 prompt input -> parser -> normalized。
+    """
+    minimal_agent_context = {
+        "portfolio_summary": {"equity": 100000, "cash": 5000, "positions": {"SPY": 0.5}},
+        "risk_flags": [],
+        "proposal_summary": ["NVDA ADD 0.05"],
+        "approval_focus": [{"symbol": "NVDA", "score": 0.88, "allocator": "probe", "one_line_reason": "score high"}],
+        "recommendation": "approve",
+        "recommendation_reasons": ["no risk flags", "approval_focus available"],
+    }
+    prompt_input = build_approver_prompt_input(minimal_agent_context)
+    assert "portfolio_summary" in prompt_input
+    assert "risk_flags" in prompt_input
+    assert "proposal_summary" in prompt_input
+    assert "approval_focus" in prompt_input
+    assert "recommendation" in prompt_input
+    assert "recommendation_reasons" in prompt_input
+    assert prompt_input["recommendation"] == "approve"
+
+    raw_outputs = [
+        "I recommend approving this trade",
+        "approve",
+        "We should reject due to risk",
+        "reject",
+        "hold for now",
+        "defer",
+    ]
+    expected = ["approve", "approve", "reject", "reject", "defer", "defer"]
+    for raw, exp in zip(raw_outputs, expected):
+        normalized = parse_approval_decision(raw)
+        assert normalized == exp, f"raw={raw!r} -> {normalized}, expected {exp}"
 
 
 def test_config_from_dict_defaults() -> None:

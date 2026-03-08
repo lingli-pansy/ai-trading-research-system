@@ -141,6 +141,8 @@ class AutonomousTradingAgent:
         approval_artifact = store.read_approval_decision(run_id)
         raw_agent_output = (approval_artifact or {}).get("raw_agent_output", "") or ""
         parsed_decision = (approval_artifact or {}).get("parsed_decision", "") or approval_decision
+        normalized_decision = (approval_artifact or {}).get("normalized_decision", "") or parsed_decision
+        parser_source = (approval_artifact or {}).get("parser_source", "") or ""
         agent_context = store.read_artifact(run_id, "agent_context")
         portfolio_summary_for_display: dict[str, Any] = {}
         approval_focus_lines: list[str] = []
@@ -220,6 +222,8 @@ class AutonomousTradingAgent:
             "recommendation_reasons": recommendation_reasons,
             "raw_agent_output": raw_agent_output,
             "parsed_decision": parsed_decision,
+            "normalized_decision": normalized_decision,
+            "parser_source": parser_source,
         }
 
     def run_loop(
@@ -307,14 +311,18 @@ def format_run_observability(summary: dict[str, Any]) -> str:
         *(top_opportunities if top_opportunities else ["(no opportunity_ranking)"]),
         "APPROVAL_FOCUS",
         *(approval_focus[:3] if approval_focus else ["(none)"]),
+        "APPROVER",
+        "RAW_OUTPUT",
+        (summary.get("raw_agent_output") or "(none)")[:200],
+        "PARSED",
+        summary.get("parsed_decision") or "(none)",
+        "NORMALIZED",
+        summary.get("normalized_decision") or summary.get("parsed_decision") or "(none)",
+        "PARSER_SOURCE",
+        summary.get("parser_source") or "(none)",
         "RECOMMENDATION",
         (summary.get("recommendation") or "defer").lower(),
         *([f"- {r}" for r in (summary.get("recommendation_reasons") or [])[:3]]),
-        "AGENT_DECISION",
-        "RAW_OUTPUT",
-        (summary.get("raw_agent_output") or "(none)")[:200],
-        "PARSED_DECISION",
-        summary.get("parsed_decision") or "(none)",
         "PROPOSAL",
         *([str(x) for x in plan_lines] if plan_lines else ["(no plan)"]),
         "RISK FLAGS",

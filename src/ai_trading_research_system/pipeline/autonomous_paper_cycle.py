@@ -930,6 +930,8 @@ def run_autonomous_paper_cycle(
                 approval_data = decision.to_dict()
                 approval_data["raw_agent_output"] = getattr(decision, "raw_agent_output", "") or ""
                 approval_data["parsed_decision"] = decision.decision
+                approval_data["parser_source"] = "rule_parser"
+                approval_data["normalized_decision"] = decision.decision
             else:
                 raw = (callback_result.get("raw_agent_output") or callback_result.get("decision") or "") if isinstance(callback_result, dict) else ""
                 parsed = parse_approval_decision(str(raw))
@@ -942,6 +944,8 @@ def run_autonomous_paper_cycle(
                     "timestamp": ts,
                     "raw_agent_output": raw,
                     "parsed_decision": parsed,
+                    "parser_source": "rule_parser",
+                    "normalized_decision": parsed,
                 }
                 decision = ApprovalDecision.from_dict(approval_data) or ApprovalDecision(
                     run_id=run_id, decision="defer", reviewer="openclaw", reason="invalid_decision", timestamp=ts,
@@ -957,6 +961,8 @@ def run_autonomous_paper_cycle(
             approval_data = decision.to_dict()
             approval_data["raw_agent_output"] = ""
             approval_data["parsed_decision"] = decision.decision
+            approval_data["parser_source"] = "rule_parser"
+            approval_data["normalized_decision"] = decision.decision
         store.write_approval_decision(run_id, approval_data)
         paths["approval_decision"] = store.path_for_artifact(run_id, "approval_decision")
         audit("approval_decision", {"decision": decision.decision, "reviewer": decision.reviewer})

@@ -19,6 +19,22 @@ from ai_trading_research_system.state.experience_store import ExperienceStore, g
 from ai_trading_research_system.state.run_store import RunStore, get_run_store
 
 
+def build_approver_prompt_input(agent_context: dict[str, Any] | None) -> dict[str, Any]:
+    """
+    从 agent_context 构造 approver 联调用 prompt 输入，结构稳定，调用方无需再拼凑。
+    仅包含审批所需字段，适合第一阶段联调。
+    """
+    ctx = agent_context or {}
+    return {
+        "portfolio_summary": ctx.get("portfolio_summary") or {},
+        "risk_flags": list(ctx.get("risk_flags") or []),
+        "proposal_summary": list(ctx.get("proposal_summary") or []),
+        "approval_focus": list(ctx.get("approval_focus") or []),
+        "recommendation": (ctx.get("recommendation") or "defer").lower(),
+        "recommendation_reasons": list(ctx.get("recommendation_reasons") or []),
+    }
+
+
 def parse_approval_decision(text: str) -> str:
     """
     从 agent 原始输出解析出规范决策：approve | reject | defer。
