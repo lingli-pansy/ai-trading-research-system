@@ -1,11 +1,10 @@
 """
-UC-09 Weekly Autonomous Paper: 一周自治 paper 编排。
-接入 research -> strategy -> nautilus paper 主线；写入 Experience Store；产出周报与 benchmark 对比。
+UC-09 Weekly Autonomous Paper: 一周自治 paper 编排（controller only）。
+职责：snapshot → research → strategy → allocation → execution；其余委托 services（benchmark、report、experience）。
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -14,19 +13,15 @@ from ai_trading_research_system.autonomous import (
     mandate_from_cli,
     PortfolioAllocator,
     AutonomousExecutionStateMachine,
-    BenchmarkComparator,
-    WeeklyReportGenerator,
     AllocationResult,
-    BenchmarkResult,
-    WeeklyReport,
 )
-from ai_trading_research_system.autonomous.benchmark import get_benchmark_return_for_period
 from ai_trading_research_system.autonomous.schemas import WeeklyTradingMandate, AccountSnapshot
 from ai_trading_research_system.research.orchestrator import ResearchOrchestrator
 from ai_trading_research_system.strategy.translator import ContractTranslator
 from ai_trading_research_system.execution.nautilus_paper_runner import NautilusPaperRunner
-from ai_trading_research_system.backtest.runner import run_paper_simulation, BacktestMetrics
-from ai_trading_research_system.experience.writer import write_run_result, RunResultPayload
+from ai_trading_research_system.services.benchmark_service import get_benchmark_return, compare_to_benchmark
+from ai_trading_research_system.services.report_service import generate_and_write as report_generate_and_write
+from ai_trading_research_system.services.experience_service import write_weekly_run
 
 
 @dataclass
@@ -54,8 +49,8 @@ def run_weekly_autonomous_paper(
     report_dir: Path | None = None,
 ) -> WeeklyPaperResult:
     """
-    执行一周自治 paper：mandate -> snapshot -> 多轮 research/allocator/paper -> benchmark -> report -> store。
-    默认走真实路径（IBKR snapshot、yfinance 数据、真实 benchmark）；仅显式 use_mock=True 时走 mock。
+    执行一周自治 paper：mandate → snapshot → 多轮 research/allocator/paper → benchmark_service → report_service。
+    Experience 写入由 experience_service 完成。
     """
     mandate = mandate_from_cli(
         capital=capital,
@@ -69,7 +64,6 @@ def run_weekly_autonomous_paper(
     allocator = PortfolioAllocator(max_position_pct=0.25)
     orchestrator = ResearchOrchestrator(use_mock=use_mock, use_llm=use_llm)
     translator = ContractTranslator()
-    # 默认 watchlist：单标的 NVDA 做最小闭环
     symbols = ["NVDA"]
     total_pnl = 0.0
     total_trades = 0
@@ -83,7 +77,6 @@ def run_weekly_autonomous_paper(
         day_trades = 0
         for sym in symbols:
             context, contract = orchestrator.run_with_context(sym)
-            # 收集本轮分析、新闻、盘面，供周报展示
             daily_research.append({
                 "day": day,
                 "symbol": sym,
@@ -111,18 +104,10 @@ def run_weekly_autonomous_paper(
             day_trades += result.trade_count
             if result.trade_count > 0:
                 key_trades.append(f"{sym} trades={result.trade_count} pnl={result.pnl:.2f}")
-            # 写 Experience Store（每轮一次 run，extra 含 contract 快照便于回溯）
-            start_d = (datetime.now(timezone.utc).date()).isoformat()
-            end_d = start_d
-            payload = RunResultPayload(
-                symbol=sym,
-                start_date=start_d,
-                end_date=end_d,
-                sharpe=0.0,
-                max_drawdown=0.0,
-                win_rate=0.0,
-                pnl=result.pnl,
-                trade_count=result.trade_count,
+            run_id = write_weekly_run(
+                sym,
+                result.pnl,
+                result.trade_count,
                 extra={
                     "weekly_paper_day": day,
                     "mandate_id": mandate.mandate_id,
@@ -134,22 +119,19 @@ def run_weekly_autonomous_paper(
                 },
                 regime_tag="weekly_paper",
             )
-            run_id = write_run_result(payload)
             run_ids.append(run_id)
         total_pnl += day_pnl
         total_trades += day_trades
 
     sm.complete_week()
     portfolio_return = total_pnl / capital if capital else 0.0
-    # 主路径：真实 benchmark 收益；use_mock 时仍可拉 SPY 或返回 0 并标记 source=mock
-    benchmark_return, benchmark_source = get_benchmark_return_for_period(
+    benchmark_return, benchmark_source = get_benchmark_return(
         symbol=benchmark,
         lookback_days=duration_days,
     )
     if use_mock:
         benchmark_source = "mock"
-    comp = BenchmarkComparator()
-    bench_result = comp.compare(
+    bench_result = compare_to_benchmark(
         portfolio_return=portfolio_return,
         benchmark_return=benchmark_return,
         max_drawdown=0.0,
@@ -157,8 +139,8 @@ def run_weekly_autonomous_paper(
         period=f"day_0_to_{duration_days}",
         benchmark_source=benchmark_source,
     )
-    gen = WeeklyReportGenerator()
-    report = gen.generate(
+    report_dir = report_dir or Path(".")
+    report_path = report_generate_and_write(
         mandate,
         bench_result,
         key_trades=key_trades,
@@ -166,14 +148,8 @@ def run_weekly_autonomous_paper(
         no_trade_days=sum(1 for _ in no_trade_reasons),
         no_trade_reasons=no_trade_reasons[:5],
         daily_research=daily_research,
+        report_dir=report_dir,
     )
-    report_dir = report_dir or Path(".")
-    report_dir.mkdir(parents=True, exist_ok=True)
-    report_path = str(report_dir / f"weekly_report_{mandate.mandate_id}.json")
-    with open(report_path, "w", encoding="utf-8") as f:
-        import json
-        json.dump(gen.to_dict(report), f, ensure_ascii=False, indent=2)
-
     market_data_source = "mock" if use_mock else "yfinance"
     summary = {
         "portfolio_return": portfolio_return,

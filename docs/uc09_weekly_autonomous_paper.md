@@ -18,8 +18,8 @@ python scripts/run_weekly_autonomous_paper.py --capital 10000 --benchmark SPY
 
 ## OpenClaw
 
-- command：`weekly_autonomous_paper`；args: capital, benchmark, duration_days, auto_confirm；默认 use_mock=False。
-- Skill 可调用 `execute(RoutedCommand("weekly_autonomous_paper", ...))` 或上述 CLI。
+- command：`weekly_autonomous_paper`、`weekly_report`；args: capital, benchmark, days；默认 use_mock=False。
+- 入口：`python scripts/run_for_openclaw.py weekly_autonomous_paper [--capital 10000] [--benchmark SPY] [--days 5] [--mock]`；Skill 可调用 `openclaw.adapter.run_weekly_paper_report` 或上述 CLI。
 
 ---
 

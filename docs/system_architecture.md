@@ -63,6 +63,14 @@ flowchart TB
 
 ---
 
+## 入口与控制面（当前实现）
+
+- **CLI**：`presentation/cli.py` 仅做参数解析与打印；业务由 `application/commands` 执行。
+- **OpenClaw**：`openclaw/adapter`、`openclaw/commands` 将 skill 映射到 `application/commands`；persona/skills 见 `openclaw/persona.md`、`openclaw/skills.md`。
+- **UC-09**：`pipeline/weekly_paper_pipe` 为编排层（snapshot → research → strategy → allocation → execution）；benchmark/report/experience 由 `services/` 提供。
+
+---
+
 ## 层级简述
 
 1. **User / OpenClaw** — 系统入口

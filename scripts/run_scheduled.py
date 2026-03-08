@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 from datetime import datetime, timezone
 
-from ai_trading_research_system.pipeline.openclaw_adapter import (
+from ai_trading_research_system.openclaw.adapter import (
     run_research_report,
     run_backtest_report,
 )

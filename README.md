@@ -61,7 +61,7 @@ Execution Engine
 python3 -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e .
-cp .env.example .env      # 开发前准备（见 docs/integration/cli_usage.md）
+cp .env.example .env      # 开发前准备（见 docs/operations.md）
 
 # 推荐：一句命令跑通 E2E（研究结论 → 策略生成 → 回测结果 → 交易总结）
 python cli.py demo NVDA
@@ -131,6 +131,7 @@ python cli.py research NVDA --mock
 | [docs/system_architecture.md](docs/system_architecture.md) | 目标架构总览 |
 | [docs/core_concepts.md](docs/core_concepts.md) | ResultSchema、DecisionContract、StrategySpec、Experience Store |
 | [docs/uc09_weekly_autonomous_paper.md](docs/uc09_weekly_autonomous_paper.md) | UC-09 周自治 Paper |
+| [docs/execution_pipeline.md](docs/execution_pipeline.md) | 执行流水线（Backtest/Paper/Live） |
 | [docs/archive/](docs/archive/) | 历史文档（restructuring_plan、mvp_plan、live_readiness_checklist、PRD 等） |
 
 ## 目录结构
@@ -143,7 +144,11 @@ ai-trading-research-system/
 ├── src/
 │   └── ai_trading_research_system/
 │       ├── config/
-│       ├── control/       # Phase 2：command_router、skill_interface（与 OpenClaw Skill 打通）
+│       ├── application/   # Control Plane：commands（research_symbol、backtest_symbol、run_demo、weekly_paper、generate_weekly_report）
+│       ├── presentation/  # CLI：参数解析 + 调用 application.commands + 打印
+│       ├── openclaw/      # OpenClaw：adapter、persona、skills、commands 映射
+│       ├── services/      # UC-09：benchmark_service、report_service、experience_service
+│       ├── control/       # command_router、skill_interface（与 OpenClaw 打通）
 │       ├── data/
 │       ├── research/
 │       ├── decision/

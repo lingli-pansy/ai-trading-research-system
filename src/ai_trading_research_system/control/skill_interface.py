@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from ai_trading_research_system.control.command_router import RoutedCommand
-from ai_trading_research_system.pipeline.openclaw_adapter import (
+from ai_trading_research_system.openclaw.adapter import (
     run_research_report,
     run_backtest_report,
     run_demo_report,
@@ -27,7 +27,7 @@ def execute(
     """
     Execute a routed command and return result.
     If as_json=True (default), returns a dict (for Skill/OpenClaw); otherwise returns stdout string from CLI.
-    Uses Python API (openclaw_adapter) so output format matches run_for_openclaw.py / openclaw_integration.md.
+    Uses openclaw.adapter so output format matches run_for_openclaw.py.
     """
     subcommand = cmd.subcommand
     kwargs = cmd.to_kwargs()
