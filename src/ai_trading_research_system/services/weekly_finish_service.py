@@ -103,6 +103,17 @@ def finish_week(
     period = f"day_0_to_{duration_days}"
     write_evolution_proposal_snapshot(mandate_id=mandate.mandate_id, period=period, proposal=proposed_evolution)
     write_evolution_decision_snapshot(mandate_id=mandate.mandate_id, period=period, decision=approved_evolution)
+    last_report_path = str((report_dir or Path(".")) / f"weekly_report_{mandate.mandate_id}.json")
+    policy_obj = getattr(mandate, "policy", None) or default_policy()
+    system_snapshot_at_week_end = {
+        "experiment_id": experiment_id or "",
+        "cycle_number": cycle_number or 0,
+        "cycle_status": "completed",
+        "last_report_path": last_report_path,
+        "portfolio_health_summary": portfolio_health or {},
+        "active_policy": policy_obj.to_dict(),
+        "pending_evolution_proposals": [proposed_evolution],
+    }
     why_replacements = ""
     if replacement_decisions:
         why_replacements = f"因新机会分数差达到策略阈值，执行 {len(replacement_decisions)} 次仓位替换。"
@@ -133,6 +144,7 @@ def finish_week(
         experiment_id=experiment_id or "",
         cycle_number=cycle_number or 0,
         policy_version=policy_version or "",
+        system_snapshot_at_week_end=system_snapshot_at_week_end,
     )
     if portfolio_health:
         write_portfolio_health_snapshot(mandate_id=mandate.mandate_id, period=period, snapshot=portfolio_health)

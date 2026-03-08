@@ -514,6 +514,124 @@ def read_health_trigger_events(
         conn.close()
 
 
+def read_latest_experiment_cycle(
+    experiment_id: str | None = None,
+    db_path: Path | None = None,
+) -> dict[str, Any] | None:
+    """Read latest experiment_cycles row (optionally by experiment_id). Returns one row as dict or None."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        if experiment_id:
+            cur.execute(
+                """SELECT experiment_id, mandate_id, start_time, end_time, status, last_rebalance, last_health_check, last_report_generated, cycle_number, policy_version, applied_policies, evolution_decision, final_performance
+                   FROM experiment_cycles WHERE experiment_id = ? ORDER BY id DESC LIMIT 1""",
+                (experiment_id,),
+            )
+        else:
+            cur.execute(
+                """SELECT experiment_id, mandate_id, start_time, end_time, status, last_rebalance, last_health_check, last_report_generated, cycle_number, policy_version, applied_policies, evolution_decision, final_performance
+                   FROM experiment_cycles ORDER BY id DESC LIMIT 1""",
+            )
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "experiment_id": row[0],
+            "mandate_id": row[1],
+            "start_time": row[2],
+            "end_time": row[3],
+            "status": row[4],
+            "last_rebalance": row[5],
+            "last_health_check": row[6],
+            "last_report_generated": row[7],
+            "cycle_number": row[8],
+            "policy_version": row[9],
+            "applied_policies": _parse_json(row[10]),
+            "evolution_decision": _parse_json(row[11]),
+            "final_performance": _parse_json(row[12]),
+        }
+    finally:
+        conn.close()
+
+
+def read_latest_portfolio_health_snapshot(
+    mandate_id: str | None = None,
+    db_path: Path | None = None,
+) -> dict[str, Any] | None:
+    """Read latest portfolio_health_snapshot row. Returns snapshot_json as dict or None."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        if mandate_id:
+            cur.execute(
+                """SELECT period, snapshot_json, created_at FROM portfolio_health_snapshot WHERE mandate_id = ? ORDER BY id DESC LIMIT 1""",
+                (mandate_id,),
+            )
+        else:
+            cur.execute(
+                """SELECT period, snapshot_json, created_at FROM portfolio_health_snapshot ORDER BY id DESC LIMIT 1""",
+            )
+        row = cur.fetchone()
+        if not row:
+            return None
+        snap = _parse_json(row[1])
+        return {"period": row[0], "snapshot": snap if isinstance(snap, dict) else {}, "created_at": row[2]}
+    finally:
+        conn.close()
+
+
+def read_latest_evolution_proposal(
+    mandate_id: str | None = None,
+    db_path: Path | None = None,
+) -> dict[str, Any] | None:
+    """Read latest evolution_proposal_snapshot row. Returns proposal_json as dict or None."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        if mandate_id:
+            cur.execute(
+                """SELECT period, proposal_json, created_at FROM evolution_proposal_snapshot WHERE mandate_id = ? ORDER BY id DESC LIMIT 1""",
+                (mandate_id,),
+            )
+        else:
+            cur.execute(
+                """SELECT period, proposal_json, created_at FROM evolution_proposal_snapshot ORDER BY id DESC LIMIT 1""",
+            )
+        row = cur.fetchone()
+        if not row:
+            return None
+        prop = _parse_json(row[1])
+        return {"period": row[0], "proposal": prop if isinstance(prop, dict) else {}, "created_at": row[2]}
+    finally:
+        conn.close()
+
+
+def read_latest_intraday_trigger(
+    mandate_id: str | None = None,
+    db_path: Path | None = None,
+) -> dict[str, Any] | None:
+    """Read latest intraday_trigger_events row for last_trigger_event."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        if mandate_id:
+            cur.execute(
+                """SELECT period, trigger_type, trigger_reason, severity, positions_changed, created_at FROM intraday_trigger_events WHERE mandate_id = ? ORDER BY id DESC LIMIT 1""",
+                (mandate_id,),
+            )
+        else:
+            cur.execute(
+                """SELECT period, trigger_type, trigger_reason, severity, positions_changed, created_at FROM intraday_trigger_events ORDER BY id DESC LIMIT 1""",
+            )
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {"period": row[0], "trigger_type": row[1], "trigger_reason": row[2], "severity": row[3], "positions_changed": _parse_json(row[4]), "created_at": row[5]}
+    finally:
+        conn.close()
+
+
 def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
     path = db_path or _get_db_path()
     _ensure_dir(path)

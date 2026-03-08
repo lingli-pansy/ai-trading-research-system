@@ -72,7 +72,20 @@ def main() -> int:
     p_weekly_report = subparsers.add_parser("weekly_report", help="Read latest weekly report or show summary (no execution)")
     _add_common(p_weekly_report)
 
+    p_status = subparsers.add_parser("status", help="System status summary (experiment cycle, health, policy, triggers)")
+
     args = parser.parse_args()
+
+    if args.command == "status":
+        from ai_trading_research_system.services.status_service import get_system_status
+        status = get_system_status()
+        output = render("status", status.to_dict(), args)
+        if isinstance(output, dict):
+            print(json.dumps(output, indent=2, default=_json_serial))
+        else:
+            for line in output:
+                print(line)
+        return 0
 
     kwargs = kwargs_from_cli_args(args.command, args)
     result = command_run(args.command, **kwargs)

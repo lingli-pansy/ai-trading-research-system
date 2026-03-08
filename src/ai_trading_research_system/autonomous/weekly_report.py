@@ -46,6 +46,7 @@ class WeeklyReport:
     experiment_id: str = ""
     cycle_number: int = 0
     policy_version: str = ""
+    system_snapshot_at_week_end: dict[str, Any] = field(default_factory=dict)
 
 
 class WeeklyReportGenerator:
@@ -79,6 +80,7 @@ class WeeklyReportGenerator:
         experiment_id: str = "",
         cycle_number: int = 0,
         policy_version: str = "",
+        system_snapshot_at_week_end: dict[str, Any] | None = None,
     ) -> WeeklyReport:
         key_trades = key_trades or []
         risk_events = risk_events or []
@@ -105,6 +107,7 @@ class WeeklyReportGenerator:
         experiment_id = experiment_id or ""
         cycle_number = cycle_number or 0
         policy_version = policy_version or ""
+        system_snapshot_at_week_end = system_snapshot_at_week_end or {}
         if benchmark_result.excess_return > 0.02:
             suggestion = "组合跑赢基准，可维持当前风险偏好。"
         elif benchmark_result.trade_count == 0:
@@ -144,6 +147,7 @@ class WeeklyReportGenerator:
             experiment_id=experiment_id,
             cycle_number=cycle_number,
             policy_version=policy_version,
+            system_snapshot_at_week_end=system_snapshot_at_week_end,
         )
 
     def to_dict(self, report: WeeklyReport) -> dict[str, Any]:

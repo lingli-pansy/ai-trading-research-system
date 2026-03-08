@@ -39,6 +39,8 @@ def render(command: str, result: Any, args: Any) -> RenderOutput:
             "mandate_id": getattr(result, "mandate_id", ""),
             "summary": getattr(result, "summary", {}),
         }
+    if command == "status":
+        return result if isinstance(result, dict) else getattr(result, "to_dict", lambda: {})()
     return []
 
 

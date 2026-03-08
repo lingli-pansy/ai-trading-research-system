@@ -41,6 +41,7 @@ def generate_and_write(
     experiment_id: str = "",
     cycle_number: int = 0,
     policy_version: str = "",
+    system_snapshot_at_week_end: dict[str, Any] | None = None,
 ) -> str:
     """Generate weekly report and write to report_dir/weekly_report_{mandate_id}.json. Returns path."""
     if policy_used is None and getattr(mandate, "policy", None) is not None:
@@ -78,6 +79,7 @@ def generate_and_write(
         experiment_id=experiment_id or "",
         cycle_number=cycle_number or 0,
         policy_version=policy_version or "",
+        system_snapshot_at_week_end=system_snapshot_at_week_end or {},
     )
     report_dir = report_dir or Path(".")
     report_dir.mkdir(parents=True, exist_ok=True)
