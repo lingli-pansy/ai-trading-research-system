@@ -2,12 +2,13 @@
 OpenClaw Agent Adapter: 稳定门面，将 OpenClaw 映射到 AutonomousTradingAgent。
 不暴露 pipeline 细节；输入为 OpenClawAgentConfig，输出为结构化 summary。
 OpenClaw agent 作为 proposal approver：approve_proposal(proposal, context) -> ApprovalDecision。
-支持用户自然语言指令：route_user_intent + 4 handlers（开始建仓 / 当前投资 / 调仓建议 / 确认执行）。
+支持同步完成式用户交互：handle_trading_intent(message) -> 统一 { status, summary, details }，无 exec/poll。
 """
 from __future__ import annotations
 
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -333,15 +334,23 @@ def format_openclaw_run_output(summary: dict[str, Any], *, include_context: bool
     return "\n".join(lines)
 
 
-# ---------- Intent Router & User Instruction Handlers (MVP 对话入口) ----------
+# ---------- 同步完成式 Intent：统一 status/summary/details，无 exec/poll ----------
 
 IntentType = Literal["start_build_position", "show_portfolio", "review_latest_proposal", "approve_execution", "unknown"]
+IntentStatus = Literal["ok", "error", "no_proposal", "pending_confirmation"]
+DEFAULT_INTENT_TIMEOUT_SECONDS = 30
+
+
+def _append_intent_audit(store: RunStore, intent_run_id: str, event: str, detail: dict[str, Any] | None = None) -> None:
+    """写入 runs/<intent_run_id>/audit.json，用于 intent_received / intent_routed / handler_start / handler_complete / handler_error。"""
+    store.create_run(intent_run_id)
+    store.append_audit(intent_run_id, {"event": event, **(detail or {})})
 
 
 def route_user_intent(message: str) -> IntentType:
     """
     根据用户消息识别意图。关键词：
-    - 开始建仓 / 建仓 / start position -> start_build_position
+    - 开始建仓 / 建仓 / 账户建仓 / start position -> start_build_position
     - 当前投资 / 组合 / portfolio -> show_portfolio
     - 调仓 / 建议 / rebalance -> review_latest_proposal
     - 确认 / 执行 / approve -> approve_execution
@@ -351,7 +360,7 @@ def route_user_intent(message: str) -> IntentType:
     t = message.strip().lower()
     if not t:
         return "unknown"
-    if any(k in t for k in ("开始建仓", "建仓", "start position", "startposition")):
+    if any(k in t for k in ("开始建仓", "建仓", "账户建仓", "start position", "startposition")):
         return "start_build_position"
     if any(k in t for k in ("当前投资", "投资情况", "组合", "portfolio")):
         return "show_portfolio"
@@ -362,14 +371,12 @@ def route_user_intent(message: str) -> IntentType:
     return "unknown"
 
 
-def handle_start_build_position(
+def _handler_start_build_position(
     *,
     config: OpenClawAgentConfig | None = None,
     runs_root: Path | None = None,
 ) -> dict[str, Any]:
-    """
-    运行 autonomous_paper_cycle（proposal_only=True），返回 proposal + recommendation。
-    """
+    """同步：运行 autonomous_paper_cycle(proposal_only=True)，返回统一格式。"""
     from ai_trading_research_system.application.commands.run_autonomous_paper_cycle import run_autonomous_paper_cycle
 
     cfg = config or OpenClawAgentConfig()
@@ -390,84 +397,86 @@ def handle_start_build_position(
     agent_context = load_agent_context(run_id, runs_root=root)
     proposal = store.read_proposal(run_id) or {}
     return {
-        "intent": "start_build_position",
-        "run_id": run_id,
-        "ok": out.ok,
-        "proposal_summary": proposal.get("proposal_summary") or [],
-        "rebalance_plan": proposal.get("rebalance_plan") or {},
-        "recommendation": (agent_context or {}).get("recommendation") or "defer",
-        "recommendation_reasons": (agent_context or {}).get("recommendation_reasons") or [],
-        "approval_focus": (agent_context or {}).get("approval_focus") or [],
-    }
-
-
-def handle_show_portfolio(*, runs_root: Path | None = None) -> dict[str, Any]:
-    """
-    读取最新 portfolio_after（或 get_latest_portfolio_state），返回组合摘要。
-    """
-    store = get_run_store(root=runs_root)
-    state = store.get_latest_portfolio_state(use_mock=True)
-    if not state:
-        return {"intent": "show_portfolio", "ok": False, "message": "无组合数据", "portfolio": {}}
-    return {
-        "intent": "show_portfolio",
-        "ok": True,
-        "portfolio": {
-            "equity": state.get("equity"),
-            "cash": state.get("cash"),
-            "positions": state.get("positions") or [],
-            "source": state.get("source", ""),
+        "status": "pending_confirmation",
+        "summary": "已生成投资组合方案",
+        "details": {
+            "run_id": run_id,
+            "ok": out.ok,
+            "proposal_summary": proposal.get("proposal_summary") or [],
+            "rebalance_plan": proposal.get("rebalance_plan") or {},
+            "recommendation": (agent_context or {}).get("recommendation") or "defer",
+            "recommendation_reasons": (agent_context or {}).get("recommendation_reasons") or [],
+            "approval_focus": (agent_context or {}).get("approval_focus") or [],
         },
     }
 
 
-def handle_review_latest_proposal(*, runs_root: Path | None = None) -> dict[str, Any]:
-    """
-    调用 RunStore.get_latest_pending_approval_run()，返回 proposal、approval_focus、recommendation。
-    """
+def _handler_show_portfolio(*, runs_root: Path | None = None) -> dict[str, Any]:
+    """同步：读取最新 portfolio snapshot，返回统一格式。"""
+    store = get_run_store(root=runs_root)
+    state = store.get_latest_portfolio_state(use_mock=True)
+    if not state:
+        return {
+            "status": "error",
+            "summary": "无组合数据",
+            "details": {"portfolio": {}},
+        }
+    return {
+        "status": "ok",
+        "summary": "当前组合",
+        "details": {
+            "portfolio": {
+                "equity": state.get("equity"),
+                "cash": state.get("cash"),
+                "positions": state.get("positions") or [],
+                "source": state.get("source", ""),
+            },
+        },
+    }
+
+
+def _handler_review_latest_proposal(*, runs_root: Path | None = None) -> dict[str, Any]:
+    """同步：RunStore.get_latest_pending_approval_run()，返回统一格式。"""
     store = get_run_store(root=runs_root)
     pending = store.get_latest_pending_approval_run()
     if not pending:
         return {
-            "intent": "review_latest_proposal",
-            "ok": False,
-            "message": "暂无待审批的调仓建议",
-            "proposal": None,
-            "approval_focus": [],
-            "recommendation": "defer",
+            "status": "no_proposal",
+            "summary": "暂无待审批的调仓建议",
+            "details": {"proposal": None, "approval_focus": [], "recommendation": "defer"},
         }
     run_id = pending.get("run_id", "")
     proposal = pending.get("proposal") or {}
     agent_context = load_agent_context(run_id, runs_root=runs_root)
     return {
-        "intent": "review_latest_proposal",
-        "ok": True,
-        "run_id": run_id,
-        "proposal": proposal,
-        "proposal_summary": proposal.get("proposal_summary") or [],
-        "approval_focus": (agent_context or {}).get("approval_focus") or [],
-        "recommendation": (agent_context or {}).get("recommendation") or "defer",
-        "recommendation_reasons": (agent_context or {}).get("recommendation_reasons") or [],
+        "status": "pending_confirmation",
+        "summary": "有待审批的调仓建议",
+        "details": {
+            "run_id": run_id,
+            "proposal": proposal,
+            "proposal_summary": proposal.get("proposal_summary") or [],
+            "approval_focus": (agent_context or {}).get("approval_focus") or [],
+            "recommendation": (agent_context or {}).get("recommendation") or "defer",
+            "recommendation_reasons": (agent_context or {}).get("recommendation_reasons") or [],
+        },
     }
 
 
-def handle_approve_execution(
+def _handler_approve_execution(
     *,
     runs_root: Path | None = None,
     config: OpenClawAgentConfig | None = None,
 ) -> dict[str, Any]:
-    """
-    对最新 pending proposal 写入 approval_decision(approve)，然后执行 execution。
-    """
+    """同步：写入 approval_decision(approve) 并执行 execution。"""
     from ai_trading_research_system.pipeline.autonomous_paper_cycle import run_execution_after_approval
 
     store = get_run_store(root=runs_root)
     pending = store.get_latest_pending_approval_run()
     if not pending:
         return {
-            "intent": "approve_execution",
-            "ok": False,
-            "message": "暂无待确认的提案，请先「开始建仓」或查看「调仓建议」",
+            "status": "error",
+            "summary": "暂无待确认的提案，请先「开始建仓」或查看「调仓建议」",
+            "details": {},
         }
     run_id = pending.get("run_id", "")
     ts = datetime.now(timezone.utc).isoformat()
@@ -484,11 +493,118 @@ def handle_approve_execution(
     cfg = config or OpenClawAgentConfig()
     use_mock = cfg.use_mock if cfg else True
     results = run_execution_after_approval(run_id, store, use_mock=use_mock)
+    executed = len([r for r in results if r.get("order_done")])
+    trade_count = sum(int(r.get("trade_count", 0)) for r in results)
     return {
-        "intent": "approve_execution",
-        "ok": True,
-        "run_id": run_id,
-        "executed_orders": len([r for r in results if r.get("order_done")]),
-        "trade_count": sum(int(r.get("trade_count", 0)) for r in results),
-        "paper_results": results,
+        "status": "ok",
+        "summary": f"已执行，成交 {executed} 笔，共 {trade_count} 笔交易",
+        "details": {"run_id": run_id, "executed_orders": executed, "trade_count": trade_count, "paper_results": results},
     }
+
+
+def dispatch_trading_intent(
+    message: str,
+    *,
+    config: OpenClawAgentConfig | None = None,
+    runs_root: Path | None = None,
+    timeout_seconds: float = DEFAULT_INTENT_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """
+    同步 intent dispatcher：解析 message -> route -> 调用 handler（带 timeout）-> 返回统一 { status, summary, details }。
+    所有 handler 同步完成，不 spawn CLI。审计写入 runs/<intent_run_id>/audit.json。
+    """
+    cfg = config or OpenClawAgentConfig()
+    root = runs_root or cfg.runs_root
+    store = get_run_store(root=root)
+    intent_run_id = f"intent_{int(time.time())}"
+    _append_intent_audit(store, intent_run_id, "intent_received", {"message": message[:500]})
+
+    intent = route_user_intent(message)
+    _append_intent_audit(store, intent_run_id, "intent_routed", {"intent": intent})
+    _append_intent_audit(store, intent_run_id, "handler_start", {"intent": intent})
+
+    def run_handler() -> dict[str, Any]:
+        if intent == "start_build_position":
+            return _handler_start_build_position(config=cfg, runs_root=root)
+        if intent == "show_portfolio":
+            return _handler_show_portfolio(runs_root=root)
+        if intent == "review_latest_proposal":
+            return _handler_review_latest_proposal(runs_root=root)
+        if intent == "approve_execution":
+            return _handler_approve_execution(runs_root=root, config=cfg)
+        return {
+            "status": "error",
+            "summary": "未识别的指令，请说：开始建仓 / 当前投资情况 / 调仓建议 / 确认执行",
+            "details": {"intent": "unknown"},
+        }
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as ex:
+            fut = ex.submit(run_handler)
+            result = fut.result(timeout=timeout_seconds)
+        _append_intent_audit(store, intent_run_id, "handler_complete", {"status": result.get("status"), "intent": intent})
+        return {"intent_run_id": intent_run_id, **result}
+    except FuturesTimeoutError:
+        _append_intent_audit(store, intent_run_id, "handler_error", {"error": "operation timeout", "intent": intent})
+        return {
+            "status": "error",
+            "summary": "operation timeout",
+            "details": {"intent_run_id": intent_run_id, "intent": intent},
+        }
+    except Exception as e:
+        _append_intent_audit(store, intent_run_id, "handler_error", {"error": str(e)[:200], "intent": intent})
+        return {
+            "status": "error",
+            "summary": str(e)[:200] or "handler error",
+            "details": {"intent_run_id": intent_run_id, "intent": intent},
+        }
+
+
+def handle_trading_intent(
+    message: str,
+    *,
+    config: OpenClawAgentConfig | None = None,
+    runs_root: Path | None = None,
+    timeout_seconds: float = DEFAULT_INTENT_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """
+    单一 Python 入口：在 agent adapter 内直接调用 trading runtime，不构造 shell / exec / poll。
+    返回统一格式 { status, summary, details }，供 agent 在一个响应内完成回复。
+    """
+    return dispatch_trading_intent(
+        message,
+        config=config,
+        runs_root=runs_root,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+# 兼容旧调用方：保留同名函数，内部转调 _handler_* 并映射为旧格式（ok/message 等）
+def handle_start_build_position(
+    *,
+    config: OpenClawAgentConfig | None = None,
+    runs_root: Path | None = None,
+) -> dict[str, Any]:
+    r = _handler_start_build_position(config=config, runs_root=runs_root)
+    return {"intent": "start_build_position", "ok": r["status"] == "pending_confirmation", "run_id": r["details"].get("run_id"), "proposal_summary": r["details"].get("proposal_summary", []), "rebalance_plan": r["details"].get("rebalance_plan", {}), "recommendation": r["details"].get("recommendation", "defer"), "recommendation_reasons": r["details"].get("recommendation_reasons", []), "approval_focus": r["details"].get("approval_focus", [])}
+
+
+def handle_show_portfolio(*, runs_root: Path | None = None) -> dict[str, Any]:
+    r = _handler_show_portfolio(runs_root=runs_root)
+    return {"intent": "show_portfolio", "ok": r["status"] == "ok", "message": r["summary"] if r["status"] != "ok" else "", "portfolio": r["details"].get("portfolio", {})}
+
+
+def handle_review_latest_proposal(*, runs_root: Path | None = None) -> dict[str, Any]:
+    r = _handler_review_latest_proposal(runs_root=runs_root)
+    d = r["details"]
+    return {"intent": "review_latest_proposal", "ok": r["status"] in ("pending_confirmation", "ok"), "message": r["summary"] if r["status"] == "no_proposal" else "", "run_id": d.get("run_id"), "proposal": d.get("proposal"), "proposal_summary": d.get("proposal_summary", []), "approval_focus": d.get("approval_focus", []), "recommendation": d.get("recommendation", "defer"), "recommendation_reasons": d.get("recommendation_reasons", [])}
+
+
+def handle_approve_execution(
+    *,
+    runs_root: Path | None = None,
+    config: OpenClawAgentConfig | None = None,
+) -> dict[str, Any]:
+    r = _handler_approve_execution(runs_root=runs_root, config=config)
+    d = r["details"]
+    return {"intent": "approve_execution", "ok": r["status"] == "ok", "message": r["summary"] if r["status"] != "ok" else "", "run_id": d.get("run_id"), "executed_orders": d.get("executed_orders", 0), "trade_count": d.get("trade_count", 0), "paper_results": d.get("paper_results", [])}

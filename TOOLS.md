@@ -1,29 +1,41 @@
-# Trading Agent 工具说明
+# Trading Agent 工具说明（同步完成式，无 exec/poll）
 
-OpenClaw Agent 通过本仓库 workspace 与用户对话时，可调用以下工具完成四类用户指令。
+Agent 通过 **Python API** 调用 trading intent dispatcher，不构造 shell / exec / process:poll。一次调用同步返回 `{ status, summary, details }`，在一个响应内完成回复。
 
-## 用户指令与工具
+## 用户指令
 
-| 用户说法示例 | 意图 | 工具调用 |
-|-------------|------|----------|
-| 开始建仓、建仓、start position | 开始建仓 | 见下 |
-| 当前投资情况、组合、portfolio | 查看组合 | 见下 |
-| 调仓建议、最近有没有调仓、rebalance | 查看调仓建议 | 见下 |
-| 确认执行、确认、执行、approve | 确认并执行 | 见下 |
+| 用户说法 | 意图 |
+|----------|------|
+| 开始建仓、建仓、账户建仓 | 开始建仓 |
+| 当前投资情况、组合 | 查看组合 |
+| 调仓建议、最近有没有调仓 | 查看调仓建议 |
+| 确认执行、确认、执行 | 确认并执行 |
 
-## 统一调用方式
+## 调用方式（供 OpenClaw 或脚本）
 
-在**本仓库根目录**执行，将用户原始消息传入 `--message`：
+**推荐：结构化参数，避免转义**
 
 ```bash
-uv run python -m ai_trading_research_system.presentation.cli openclaw-trading-intent --message "<用户发送的原文>"
+uv run python -m ai_trading_research_system.presentation.cli openclaw-trading-intent --message-json '{"message": "账户建仓"}'
 ```
 
-可选：`--config configs/openclaw_agent.paper.yaml` 指定配置；`--json` 输出紧凑 JSON。
+**或 stdin：**
 
-返回为 JSON，包含 `intent`、`ok` 及与意图相关的字段（如 `proposal_summary`、`portfolio`、`run_id`、`paper_results` 等）。Agent 应根据返回内容向用户解释或请求确认。
+```bash
+echo '{"message": "账户建仓"}' | uv run python -m ai_trading_research_system.presentation.cli openclaw-trading-intent
+```
 
-## 说明
+可选：`--config configs/openclaw_agent.paper.yaml`，`--timeout 30`（默认 30 秒）。
 
-- Agent 只负责：解释 proposal、请求用户确认、在用户确认后触发执行。
-- 不发明交易逻辑；不直接修改 runtime / proposal schema / execution pipeline。
+## 返回格式
+
+```json
+{
+  "intent_run_id": "intent_...",
+  "status": "ok | pending_confirmation | no_proposal | error",
+  "summary": "简短说明",
+  "details": { ... }
+}
+```
+
+- Agent 根据 `status` 生成自然语言；`pending_confirmation` 时展示方案并问「是否确认执行？」；任务明确结束，无 poll。

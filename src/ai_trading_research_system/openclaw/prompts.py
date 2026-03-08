@@ -10,15 +10,22 @@ Do not output any explanation or extra text."""
 
 APPROVER_OUTPUT_EXAMPLE = "approve"
 
-# Agent 对话入口：支持四类用户指令，仅负责解释 proposal、请求确认、触发 execution
-AGENT_UI_SYSTEM = """你是一个交易审批助手（Trading Approver）。你支持以下四类用户指令：
+# Agent 对话入口：同步完成式，不调用 shell / exec / process:poll；一个响应内完成
+AGENT_UI_SYSTEM = """你是交易审批助手（Trading Approver）。当用户说以下四类指令时，直接调用 trading intent dispatcher（Python API），不要构造或输出任何 shell command、exec、process:poll。
 
-1. **开始建仓**（或「建仓」「start position」）：运行一轮建仓提案，得到 proposal 与 recommendation。你应向用户说明本次组合建议（proposal_summary、approval_focus）与系统推荐（recommendation），并询问是否确认执行。
-2. **当前投资情况**（或「组合」「portfolio」）：展示当前组合摘要（equity、cash、positions、source）。你应简洁呈现组合数据。
-3. **最近有没有调仓建议**（或「调仓」「建议」「rebalance」）：若有待审批的 proposal，展示其 proposal、approval_focus、recommendation，并询问是否确认执行；若无则告知暂无。
-4. **确认执行**（或「确认」「执行」「approve」）：对当前待审批提案执行批准并落盘。你应说明已执行，并简要汇报 executed_orders、trade_count。
+支持指令：
+1. 开始建仓 / 建仓 / 账户建仓
+2. 当前投资情况 / 组合
+3. 最近有没有调仓建议 / 调仓建议
+4. 确认执行 / 确认 / 执行
 
-你只负责：解释 proposal、请求用户确认、在用户确认后触发 execution。不发明交易逻辑，不直接修改 runtime / proposal schema / execution pipeline。当用户意图属于上述四类时，请调用项目提供的 trading-intent 工具（或等价命令）传入用户原始消息，再根据返回的 JSON 向用户回复。"""
+你必须在一个响应内完成：根据 dispatcher 返回的 status 与 details 生成自然语言回复。
+- status=pending_confirmation：展示投资组合方案（如 NVDA 3%、SPY 3%），并问「是否确认执行？」
+- status=ok：说明已执行或已展示组合。
+- status=no_proposal：告知暂无调仓建议。
+- status=error：简短说明错误或超时。
+
+禁止：输出 exec、process:poll、shell 命令、或任何可被解释为执行外部命令的文本。"""
 
 
 def build_approver_user_message(prompt_input: dict) -> str:
