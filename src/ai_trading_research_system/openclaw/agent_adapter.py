@@ -340,6 +340,33 @@ IntentType = Literal["start_build_position", "show_portfolio", "review_latest_pr
 IntentStatus = Literal["ok", "error", "no_proposal", "pending_confirmation"]
 DEFAULT_INTENT_TIMEOUT_SECONDS = 30
 
+# summary 中严禁出现，否则替换为业务化提示（面向用户）
+FORBIDDEN_SUMMARY_TOKENS = (
+    "exec", "poll", "shell", "bridge", "sync bridge", "platform", "session", "workspace",
+    "AGENTS.md", "TOOLS.md", "run_id", "artifacts", "path", "runs_root", "config_path",
+    "intent_run_id", "handler_error", "operation timeout",
+)
+
+
+def sanitize_summary_for_user(summary: str, status: str) -> str:
+    """若 summary 含内部实现相关词，返回业务化兜底句；否则返回原 summary。"""
+    if not summary or not isinstance(summary, str):
+        return _business_fallback_for_status(status)
+    lower = summary.lower()
+    for token in FORBIDDEN_SUMMARY_TOKENS:
+        if token.lower() in lower:
+            return _business_fallback_for_status(status)
+    return summary
+
+
+def _business_fallback_for_status(status: str) -> str:
+    """按 status 返回面向用户的业务化失败/中性提示。"""
+    if status == "error":
+        return "当前暂时无法完成该操作，请稍后再试。"
+    if status == "no_proposal":
+        return "当前没有可用的交易建议。"
+    return "当前暂时无法完成该操作，请稍后再试。"
+
 
 def _append_intent_audit(store: RunStore, intent_run_id: str, event: str, detail: dict[str, Any] | None = None) -> None:
     """写入 runs/<intent_run_id>/audit.json，用于 intent_received / intent_routed / handler_start / handler_complete / handler_error。"""
@@ -349,11 +376,11 @@ def _append_intent_audit(store: RunStore, intent_run_id: str, event: str, detail
 
 def route_user_intent(message: str) -> IntentType:
     """
-    根据用户消息识别意图。关键词：
+    根据用户消息识别意图。自然语言均可路由：
     - 开始建仓 / 建仓 / 账户建仓 / start position -> start_build_position
-    - 当前投资 / 组合 / portfolio -> show_portfolio
-    - 调仓 / 建议 / rebalance -> review_latest_proposal
-    - 确认 / 执行 / approve -> approve_execution
+    - 查看投资组合 / 查看持仓 / 当前投资情况 / 组合 / portfolio -> show_portfolio
+    - 查看最新建议 / 调仓建议 / 最近有没有调仓建议 / rebalance -> review_latest_proposal
+    - 确认执行 / 确认 / 执行 / approve -> approve_execution
     """
     if not message or not isinstance(message, str):
         return "unknown"
@@ -362,11 +389,15 @@ def route_user_intent(message: str) -> IntentType:
         return "unknown"
     if any(k in t for k in ("开始建仓", "建仓", "账户建仓", "start position", "startposition")):
         return "start_build_position"
-    if any(k in t for k in ("当前投资", "投资情况", "组合", "portfolio")):
+    if any(k in t for k in (
+        "查看投资组合", "查看持仓", "当前投资", "投资情况", "组合", "portfolio", "持仓"
+    )):
         return "show_portfolio"
-    if any(k in t for k in ("调仓", "建议", "rebalance", "有没有调仓")):
+    if any(k in t for k in (
+        "查看最新建议", "调仓", "建议", "rebalance", "有没有调仓", "最新建议", "调仓建议"
+    )):
         return "review_latest_proposal"
-    if any(k in t for k in ("确认", "执行", "approve", "确认执行")):
+    if any(k in t for k in ("确认执行", "确认", "执行", "approve")):
         return "approve_execution"
     return "unknown"
 
@@ -450,8 +481,8 @@ def _handler_show_portfolio(*, runs_root: Path | None = None) -> dict[str, Any]:
     if not state:
         return {
             "status": "error",
-            "summary": "暂无组合数据",
-            "details": {"portfolio": {}},
+            "summary": "当前暂时无法获取投资组合，请稍后再试。",
+            "details": {"portfolio": {}, "reason": "no_portfolio_state"},
         }
     details = {
         "portfolio": {
@@ -481,7 +512,7 @@ def _handler_review_latest_proposal(*, runs_root: Path | None = None) -> dict[st
     if not pending:
         return {
             "status": "no_proposal",
-            "summary": "暂无待审批的调仓建议",
+            "summary": "当前没有可用的交易建议。",
             "details": {"proposal": None, "approval_focus": [], "recommendation": "defer"},
         }
     run_id = pending.get("run_id", "")
@@ -572,7 +603,7 @@ def dispatch_trading_intent(
             return _handler_approve_execution(runs_root=root, config=cfg)
         return {
             "status": "error",
-            "summary": "未识别的指令，请说：开始建仓 / 当前投资情况 / 调仓建议 / 确认执行",
+            "summary": "未识别的指令。可以说：开始建仓、查看投资组合、查看最新建议、确认执行。",
             "details": {"intent": "unknown"},
         }
 
@@ -586,15 +617,15 @@ def dispatch_trading_intent(
         _append_intent_audit(store, intent_run_id, "handler_error", {"error": "operation timeout", "intent": intent})
         return {
             "status": "error",
-            "summary": "operation timeout",
-            "details": {"intent_run_id": intent_run_id, "intent": intent},
+            "summary": "当前操作超时，请稍后再试。",
+            "details": {"intent_run_id": intent_run_id, "intent": intent, "error": "operation timeout"},
         }
     except Exception as e:
         _append_intent_audit(store, intent_run_id, "handler_error", {"error": str(e)[:200], "intent": intent})
         return {
             "status": "error",
-            "summary": str(e)[:200] or "handler error",
-            "details": {"intent_run_id": intent_run_id, "intent": intent},
+            "summary": "当前暂时无法完成该操作，请稍后再试。",
+            "details": {"intent_run_id": intent_run_id, "intent": intent, "error": str(e)[:500]},
         }
 
 

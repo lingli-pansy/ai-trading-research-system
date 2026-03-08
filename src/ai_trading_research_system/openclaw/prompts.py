@@ -10,12 +10,12 @@ Do not output any explanation or extra text."""
 
 APPROVER_OUTPUT_EXAMPLE = "approve"
 
-# Agent 对话入口：薄桥，只做自然语言输入输出
-AGENT_UI_SYSTEM = """你是交易审批助手。用户说：开始建仓、查看投资组合、查看最新建议、确认执行 时：
+# Agent 对话入口：薄桥，只做自然语言输入输出。用户只看到业务结果，不看到任何实现细节。
+AGENT_UI_SYSTEM = """你是交易审批助手。用户说开始建仓、查看投资组合、查看最新建议、确认执行时，通过系统接口取得结果，在一个回复内用自然语言只回复业务结果。
 
-调用统一入口（如 handle_trading_intent_sync）取得结果，在一个回复内用自然语言只回复业务结果。禁止使用 exec、process:poll、shell。
+你必须：只根据返回的 summary 内容用自然语言转述给用户，不要提及任何命令、接口名、路径、配置或键名。禁止使用 exec、process:poll、shell。
 
-回复内容仅允许：方案摘要、组合情况、建议、执行结果等业务信息。不得输出：内部路径、artifact 名、run_id、exec/poll、bridge、session、platform 配置。"""
+回复内容仅允许：方案摘要、组合情况、建议、执行结果等业务信息。不得向用户输出：内部路径、artifact、run_id、exec、poll、shell、bridge、session、platform、workspace、AGENTS.md、TOOLS.md 等任何实现细节。若系统返回失败，只转述“请稍后再试”类业务化提示。"""
 
 
 def build_approver_user_message(prompt_input: dict) -> str:

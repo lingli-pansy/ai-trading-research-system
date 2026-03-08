@@ -10,7 +10,7 @@
 
 ## 四类用户指令（开始建仓 / 查看投资组合 / 查看最新建议 / 确认执行）
 
-统一走 **openclaw.bridge.handle_trading_intent_sync(message)**。Agent 调用后根据返回的 status/summary/details 在一个回复内呈现业务结果。禁止 exec/poll/shell。见 TOOLS.md、docs/mvp-boundary.md。
+统一走 **openclaw.bridge.handle_trading_intent_sync(message)**。Agent 调用后仅用返回的 **summary** 在一个回复内呈现业务结果，不得向用户提及 bridge、platform、run_id、exec、shell 等。禁止 exec/poll/shell。见 TOOLS.md、docs/mvp-boundary.md。
 
 ## How to invoke (project-internal)
 

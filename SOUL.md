@@ -1,1 +1,1 @@
-用户说一句话 → agent 调 handle_trading_intent_sync → 得到 status/summary/details → 在一个回复内用自然语言给出业务结果。禁止 exec/poll/shell。Proposal approver 场景见 AGENTS.md 与 skills/trading-approver/SKILL.md，输出 approve/reject/defer。
+用户说一句话 → agent 调统一入口 → 得到 status/summary/details → 仅用 summary 在一个回复内用自然语言给出业务结果。禁止 exec/poll/shell。回复用户时不得出现 bridge、platform、run_id、path 等内部词。Proposal approver 场景见 AGENTS.md 与 skills/trading-approver/SKILL.md，输出 approve/reject/defer。

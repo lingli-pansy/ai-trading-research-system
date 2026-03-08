@@ -7,4 +7,4 @@
 - **summary**：面向用户的简短说明，agent 直接或略作润色回复用户。  
 - **details**：结构化数据，供系统/扩展用，不暴露路径/run_id 给用户话术。
 
-Agent 只做：解析用户意图 → 调用该入口 → 根据 status/summary/details 生成自然语言回复。禁止 exec、process:poll、shell。详见 docs/mvp-boundary.md。
+Agent 只做：解析用户意图 → 调用该入口 → 仅用返回的 summary 生成自然语言回复，不得向用户输出 status/details 或任何内部词（如 bridge、platform、run_id、exec、shell）。禁止 exec、process:poll、shell。详见 docs/mvp-boundary.md。

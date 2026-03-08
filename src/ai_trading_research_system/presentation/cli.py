@@ -272,7 +272,14 @@ def main() -> int:
         except (TypeError, ValueError):
             pass
         if not msg:
-            out = {"status": "error", "summary": "missing message", "details": {}, "bridge_invoked": True, "bridge_mode": "sync"}
+            out = {
+                "status": "error",
+                "summary": "请发送具体指令，例如：开始建仓、查看投资组合、查看最新建议、确认执行。",
+                "details": {"hint": "missing message"},
+                "bridge_invoked": True,
+                "bridge_mode": "sync",
+                "intent": "unknown",
+            }
         else:
             out = handle_trading_intent_sync(
                 msg,
