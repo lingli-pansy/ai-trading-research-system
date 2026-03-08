@@ -89,6 +89,7 @@ def finish_week(
         replacements_skipped_due_to_budget=policy_summary.get("replacements_skipped_due_to_budget", 0),
     )
     period = f"day_0_to_{duration_days}"
+    policy_obj = getattr(mandate, "policy", None)
     experience_policy = {
         "score_gap_used": policy_summary.get("score_gap_used"),
         "replacements_executed": policy_summary.get("replacements_executed", 0),
@@ -96,6 +97,11 @@ def finish_week(
             + policy_summary.get("replacements_skipped_due_to_budget", 0)),
         "rejected_due_to_threshold": policy_summary.get("rejected_due_to_threshold", 0),
     }
+    if policy_obj is not None:
+        experience_policy["minimum_score_gap_for_replacement"] = policy_obj.minimum_score_gap_for_replacement
+        experience_policy["max_replacements_per_rebalance"] = policy_obj.max_replacements_per_rebalance
+        experience_policy["turnover_budget"] = policy_obj.turnover_budget
+        experience_policy["retain_threshold"] = policy_obj.retain_threshold
     write_weekly_portfolio_experience(
         mandate_id=mandate.mandate_id,
         period=period,

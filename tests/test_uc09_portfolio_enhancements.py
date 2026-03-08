@@ -13,6 +13,7 @@ from ai_trading_research_system.autonomous.allocator import PortfolioAllocator, 
 from ai_trading_research_system.autonomous.schemas import AccountSnapshot, WeeklyTradingMandate
 from ai_trading_research_system.autonomous.weekly_report import WeeklyReportGenerator
 from ai_trading_research_system.autonomous.benchmark import BenchmarkResult
+from ai_trading_research_system.autonomous.portfolio_policy import PortfolioDecisionPolicy
 from ai_trading_research_system.services.experience_service import write_weekly_run
 from ai_trading_research_system.pipeline.weekly_paper_pipe import run_weekly_autonomous_paper
 
@@ -133,3 +134,58 @@ def test_experience_store_writes_regime_fields():
             assert params.get("vix_level") == "low"
         finally:
             os.environ.pop("EXPERIENCE_DB_PATH", None)
+
+
+def test_weekly_report_records_policy():
+    """周报记录 mandate 使用的 policy_used：minimum_score_gap, max_replacements, turnover_budget。"""
+    policy = PortfolioDecisionPolicy(
+        minimum_score_gap_for_replacement=0.5,
+        max_replacements_per_rebalance=1,
+        turnover_budget=0.4,
+        retain_threshold=0.1,
+    )
+    mandate = WeeklyTradingMandate(mandate_id="m1", watchlist=["NVDA"], policy=policy)
+    bench = BenchmarkResult(
+        portfolio_return=0.0,
+        benchmark_return=0.0,
+        excess_return=0.0,
+        max_drawdown=0.0,
+        trade_count=0,
+        period="day_0_to_1",
+        benchmark_source="mock",
+    )
+    gen = WeeklyReportGenerator()
+    report = gen.generate(mandate, bench, key_trades=[], turnover_pct=0.0)
+    assert getattr(report, "policy_used", None) is not None
+    pu = report.policy_used
+    assert "minimum_score_gap" in pu
+    assert "max_replacements" in pu
+    assert "turnover_budget" in pu
+    assert pu["minimum_score_gap"] == 0.5
+    assert pu["max_replacements"] == 1
+    assert pu["turnover_budget"] == 0.4
+
+
+def test_policy_passed_through_pipeline():
+    """Pipeline 从 mandate 取 policy；报告与 experience 中能见到 policy。"""
+    with tempfile.TemporaryDirectory() as td:
+        report_dir = Path(td)
+        result = run_weekly_autonomous_paper(
+            capital=10000,
+            benchmark="SPY",
+            duration_days=1,
+            use_mock=True,
+            symbols=["NVDA"],
+            report_dir=report_dir,
+        )
+        assert result.ok is True
+        assert result.report_path
+        report_path = Path(result.report_path)
+        assert report_path.exists(), f"Report not found: {report_path}"
+        with open(report_path, encoding="utf-8") as f:
+            data = json.load(f)
+        assert "policy_used" in data
+        pu = data["policy_used"]
+        assert "minimum_score_gap" in pu
+        assert "max_replacements" in pu
+        assert "turnover_budget" in pu

@@ -4,7 +4,9 @@ WeeklyTradingMandate：从自然语言或 CLI 参数构造结构化 mandate。
 from __future__ import annotations
 
 import uuid
+
 from ai_trading_research_system.autonomous.schemas import WeeklyTradingMandate
+from ai_trading_research_system.autonomous.portfolio_policy import PortfolioDecisionPolicy, default_policy
 
 
 def mandate_from_cli(
@@ -16,8 +18,9 @@ def mandate_from_cli(
     max_positions: int = 5,
     cash_reserve_pct: float = 0.1,
     watchlist: list[str] | None = None,
+    policy: PortfolioDecisionPolicy | None = None,
 ) -> WeeklyTradingMandate:
-    """从 CLI 参数直接构造 mandate。watchlist 为空时使用默认单 symbol。"""
+    """从 CLI 参数直接构造 mandate。watchlist 为空时使用默认单 symbol；policy 为空时使用 default_policy()。"""
     return WeeklyTradingMandate(
         mandate_id=f"mandate_{uuid.uuid4().hex[:12]}",
         mode="paper",
@@ -31,6 +34,7 @@ def mandate_from_cli(
         cash_reserve_pct=cash_reserve_pct,
         stop_conditions=["kill_switch"],
         watchlist=watchlist if watchlist else ["NVDA"],
+        policy=policy if policy is not None else default_policy(),
     )
 
 

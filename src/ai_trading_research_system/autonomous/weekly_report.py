@@ -35,6 +35,7 @@ class WeeklyReport:
     why_candidates_rejected: list[dict[str, Any]] = field(default_factory=list)
     replacements_skipped_due_to_threshold: int = 0
     replacements_skipped_due_to_budget: int = 0
+    policy_used: dict[str, Any] = field(default_factory=dict)  # minimum_score_gap, max_replacements, turnover_budget
 
 
 class WeeklyReportGenerator:
@@ -57,6 +58,7 @@ class WeeklyReportGenerator:
         why_candidates_rejected: list[dict[str, Any]] | None = None,
         replacements_skipped_due_to_threshold: int = 0,
         replacements_skipped_due_to_budget: int = 0,
+        policy_used: dict[str, Any] | None = None,
     ) -> WeeklyReport:
         key_trades = key_trades or []
         risk_events = risk_events or []
@@ -65,6 +67,14 @@ class WeeklyReportGenerator:
         opportunity_ranking = opportunity_ranking or []
         replacement_decisions = replacement_decisions or []
         why_candidates_rejected = why_candidates_rejected or []
+        if policy_used is None and getattr(mandate, "policy", None) is not None:
+            p = mandate.policy
+            policy_used = {
+                "minimum_score_gap": p.minimum_score_gap_for_replacement,
+                "max_replacements": p.max_replacements_per_rebalance,
+                "turnover_budget": p.turnover_budget,
+            }
+        policy_used = policy_used or {}
         if benchmark_result.excess_return > 0.02:
             suggestion = "组合跑赢基准，可维持当前风险偏好。"
         elif benchmark_result.trade_count == 0:
@@ -93,6 +103,7 @@ class WeeklyReportGenerator:
             why_candidates_rejected=why_candidates_rejected,
             replacements_skipped_due_to_threshold=replacements_skipped_due_to_threshold,
             replacements_skipped_due_to_budget=replacements_skipped_due_to_budget,
+            policy_used=policy_used,
         )
 
     def to_dict(self, report: WeeklyReport) -> dict[str, Any]:

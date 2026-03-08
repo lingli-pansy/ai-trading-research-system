@@ -6,6 +6,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from ai_trading_research_system.autonomous.portfolio_policy import PortfolioDecisionPolicy, default_policy
+
 
 @dataclass
 class AccountSnapshot:
@@ -38,6 +40,7 @@ class WeeklyTradingMandate:
     cash_reserve_pct: float = 0.1
     stop_conditions: list[str] = field(default_factory=list)  # e.g. ["max_drawdown_5pct", "kill_switch"]
     watchlist: list[str] = field(default_factory=lambda: ["NVDA"])  # 标的池；UC-09 多 symbol 入口
+    policy: PortfolioDecisionPolicy = field(default_factory=default_policy)  # mandate-level 组合决策策略
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -53,4 +56,5 @@ class WeeklyTradingMandate:
             "cash_reserve_pct": self.cash_reserve_pct,
             "stop_conditions": self.stop_conditions,
             "watchlist": self.watchlist,
+            "policy": self.policy.to_dict(),
         }

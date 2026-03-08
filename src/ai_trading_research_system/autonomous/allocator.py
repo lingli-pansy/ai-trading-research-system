@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ai_trading_research_system.autonomous.schemas import AccountSnapshot, WeeklyTradingMandate
-from ai_trading_research_system.autonomous.portfolio_policy import PortfolioDecisionPolicy, default_policy
+from ai_trading_research_system.autonomous.portfolio_policy import default_policy
 
 
 @dataclass
@@ -35,7 +35,6 @@ class PortfolioAllocator:
         account_snapshot: AccountSnapshot,
         mandate: WeeklyTradingMandate,
         signals: list[dict[str, Any]] | None = None,
-        policy: PortfolioDecisionPolicy | None = None,
         wait_confirmation: bool = False,
     ) -> AllocationResult:
         if wait_confirmation:
@@ -56,7 +55,7 @@ class PortfolioAllocator:
                 no_trade_reason="no_signals",
             )
 
-        policy = policy or default_policy()
+        policy = getattr(mandate, "policy", None) or default_policy()
         cash_reserve = account_snapshot.total_equity() * mandate.cash_reserve_pct
         current_positions = {p.get("symbol"): p for p in (account_snapshot.positions or []) if p.get("symbol")}
         has_scores = any(s.get("score") is not None for s in signals)

@@ -14,7 +14,6 @@ from ai_trading_research_system.autonomous import (
     PortfolioAllocator,
     AutonomousExecutionStateMachine,
     AllocationResult,
-    default_policy,
 )
 from ai_trading_research_system.autonomous.schemas import WeeklyTradingMandate, AccountSnapshot
 from ai_trading_research_system.autonomous.opportunity_ranking import OpportunityRanking, OpportunityScore
@@ -119,8 +118,7 @@ def run_weekly_autonomous_paper(
                 "rationale": signal.rationale,
                 "score": o.score,
             })
-        policy = default_policy()
-        alloc_result: AllocationResult = allocator.allocate(snapshot, mandate, signals, policy=policy, wait_confirmation=wait_any)
+        alloc_result: AllocationResult = allocator.allocate(snapshot, mandate, signals, wait_confirmation=wait_any)
         opportunity_ranking_week = [{"symbol": o.symbol, "score": o.score, "confidence": o.confidence, "risk": o.risk} for o in ranked]
         replacement_decisions_week.extend(alloc_result.replacement_decisions)
         retained_positions_week.extend(alloc_result.retained_positions)
