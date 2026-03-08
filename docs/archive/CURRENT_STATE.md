@@ -1,63 +1,41 @@
-# 当前仓库状态总表
+# 当前状态（Current State）
 
-面向新协作者与外部用户：**现在能跑通什么、哪些是 mock、哪些是过渡实现、下一步会换什么**。细节见 [mock_vs_real.md](mock_vs_real.md)、[live_readiness_checklist.md](live_readiness_checklist.md)、[mvp_plan.md](mvp_plan.md)、[restructuring_plan.md](restructuring_plan.md)。
+面向新协作者：**现在能跑通什么、哪些是 mock、哪些是过渡实现、下一步会换什么**。
 
 ---
 
-## 1. 现在能跑通什么
+## 1. 能跑通什么
 
-- **最短一条命令**：`python cli.py demo NVDA`（或 `--mock` 免网络），可看到研究结论、策略生成、回测结果、交易总结四块。见 [README 快速开始](../README.md)、[dev_prerequisites.md](dev_prerequisites.md)。
+- **最短一条命令**：`python cli.py demo NVDA`（或 `--mock` 免网络），四块输出。
 - **Research**：`python cli.py research [SYMBOL] [--mock] [--llm]`，输出 DecisionContract JSON。
-- **Backtest**：`python cli.py backtest [SYMBOL] [--start] [--end] [--mock] [--llm]`，Research → 回测 → Experience Store，打印指标。
-- **Paper**：`python cli.py paper [--symbol SYMBOL] [--once] [--mock] [--llm]`，Research → Contract → **默认 Nautilus 短窗口回测**（与 backtest 同一套策略）；本仓 Paper 引擎仅在使用方显式 use_nautilus=False 时保留（过渡层）。或配置 IBKR_* 后走 TWS。
-- **OpenClaw 调用**：`python cli.py research NVDA --mock` 或 `python scripts/run_for_openclaw.py research NVDA --mock`，stdout 单条 JSON 报告；Skill 可调用 cli 或 control 层 API，见 [openclaw_integration.md](openclaw_integration.md)。
-- **E2E 检查**：`python scripts/run_e2e_check.py NVDA --mock`，校验 Pipeline 与 Experience Store 有数据。
-- **调度**：`python scripts/run_scheduled.py [--once]`，报告落盘至 REPORT_DIR。
+- **Backtest**：`python cli.py backtest [SYMBOL] [--start] [--end] [--mock] [--llm]`，Research → 回测 → ExperienceStore。
+- **Paper**：`python cli.py paper [--symbol SYMBOL] [--once] [--mock] [--llm]`，默认 Nautilus 短窗口回测；或配置 IBKR_* 走 TWS。
+- **OpenClaw**：`python cli.py research NVDA --mock` 或 `scripts/run_for_openclaw.py`，stdout 单条 JSON。
+- **UC-09 Weekly Autonomous Paper**：**默认走真实路径**。`python cli.py weekly-paper --capital 10000 --benchmark SPY` 或 `python scripts/run_weekly_autonomous_paper.py --capital 10000 --benchmark SPY`；stdout 单条 JSON（含 snapshot_source、market_data_source、benchmark_source）。仅加 `--mock` 时走 mock（CI/回归用）。Nautilus 主线；周报落盘 `reports/weekly_report_<mandate_id>.json`。
+- **UC-09 验证**：mock 回归 `.venv/bin/python scripts/verify_uc09_mock.py`；真实联调 `.venv/bin/python scripts/verify_uc09_real.py`。
+- **E2E**：`python scripts/run_e2e_check.py NVDA --mock`；**调度**：`python scripts/run_scheduled.py [--once]`。
 
 ---
 
-## 2. 现在还是 mock 的
+## 2. Mock 与过渡
 
-- **数据**：`use_mock=True` 时使用 MockDataProvider（价格、基本面、新闻全量 mock）；未配 API Key 时 LLM 为占位。
-- **Research Agent**：BullThesisAgent、BearThesisAgent 等为写死内容；可与 `use_llm=True` 的 LLMResearchAgent 二选一。NewsAgent、TechnicalContextAgent、SynthesisAgent 为实逻辑，产出随输入变化。
-- **IB Gateway、LLM API 已支持**：配置见 [dev_prerequisites.md](dev_prerequisites.md)；实盘/生产对接步骤见 [deferred_authorization.md](deferred_authorization.md)。
-
-详见 [mock_vs_real.md](mock_vs_real.md)。
-
----
-
-## 3. 哪些是过渡实现 / 过渡层 vs 长期保留
-
-**过渡层（目标由 NautilusTrader + 重构 Phase 替代）**
-
-- 本仓 **RuleEngine**、**PortfolioEngine**、**PaperTradingEngine**（`use_nautilus=False` 时仍可用；默认 Paper 已走 Nautilus 短窗口回测）。
-- 当前 **backtest runner**（`backtest/runner.py`）已由 Nautilus 驱动；Paper 默认由 `run_paper_simulation` + `NautilusPaperRunner` 执行。
-- 上述本仓执行模块在 [restructuring_plan.md](restructuring_plan.md) 的 Phase 1–5 中将继续收口；Live 待实盘清单通过后接 NautilusTrader LiveNode。
-
-**长期保留（不因重构替换）**
-
-- **ResearchOrchestrator**、**DecisionContract** 与 Contract 规范、**ContractTranslator**（规则/信号映射）。
-- **Experience Store** 接口与表结构（[experience_schema.md](experience_schema.md)）、StrategySpec/Experience 规范文档。
-- **CLI**（`cli.py`）、**control 层**（command_router、skill_interface）、**openclaw_integration** 约定与报告格式。
-- 数据层抽象（providers）、research/agents 的接口形态（具体 Agent 实现可能由 TradingAgents Fork 替代，但 Research 层职责与输出格式保留）。
-
-新增本仓执行层逻辑时，需区分：属于过渡层（将来由 Nautilus/重构替代）还是长期资产（接口与约定保留）。过渡 vs 长期以本文档为准；与 [restructuring_plan.md](restructuring_plan.md) Phase 替换顺序一致。
+- **Mock**：仅用于 CI 与最小回归；主入口默认 **real**。详见 [mock_vs_real.md](mock_vs_real.md)。
+- **过渡层**：RuleEngine/PortfolioEngine/PaperTradingEngine（use_nautilus=False 时保留）；默认已走 Nautilus。
+- **UC-09 主路径**：AccountSnapshot 默认优先 IBKR paper；失败则 mock 并标记 snapshot_source=mock。市场数据默认 yfinance；benchmark 默认 SPY；输出含 snapshot_source、market_data_source、benchmark_source。
+- **降级**：IBKR 未配置或连接失败 → snapshot 自动 mock；yfinance 不可用时 Research/benchmark 可退化为 mock 并显式标记。
 
 ---
 
-## 4. 下一步会替换 / 补齐的
+## 3. 真实 UC-09 调试与降级
 
-- **实盘前 7 项**：多时间窗口回测、OOS、最小交易次数、回撤上限、纸面阶段、风控验证、券商连通性；交付物与 L1–L7 见 [live_readiness_checklist.md](live_readiness_checklist.md)。
-- **Post-MVP 路线**：StrategySpec compiler、NautilusTrader adapter、Experience store 增强、TradingAgents Fork 集成、实盘就绪（IBKR Paper/Live）；阶段划分见 [mvp_plan.md](mvp_plan.md#post-mvp-路线与重构方案一致)、[restructuring_plan.md](restructuring_plan.md#5-分阶段实施)。
-- **实盘/生产对接**：IBKR、OpenClaw 服务端、生产密钥、风控步骤见 [deferred_authorization.md](deferred_authorization.md)。
+- **最短真实调试命令**：`python scripts/run_weekly_autonomous_paper.py --capital 10000 --benchmark SPY`（不加 `--mock`）。
+- **降级**：仅做回归时加 `--mock` 或运行 `verify_uc09_mock.py`。
 
 ---
 
-## 5. 下一步优先级（执行顺序）
+## 4. 下一步
 
-- **P1（当前阶段）**：收敛首屏试用路径为一条主线（见 [README 快速开始](../README.md#快速开始)）。
-- **P2**：先硬替换一个过渡层，不并行改 Research / Execution / Experience。二选一推进：
-  - **方案 A**：Strategy → Backtest 链朝 NautilusTrader 适配推进；
-  - **方案 B**：Research Orchestrator 朝 TradingAgents(Fork) 迁移一部分。
-  优先完成 P1 后再定 P2 选 A 或 B。
-- **P3**：把 OpenClaw 从「可调用脚本」升级为「标准接口层」：明确入参/出参与错误契约，由 OpenClaw/Agent 调用该层而非直接调脚本；详见 [openclaw_integration.md](openclaw_integration.md#目标标准接口层)。P3 在 P2 有进展后落地。
+- 实盘前 L1–L7：见 [live_readiness_checklist.md](live_readiness_checklist.md)。
+- Post-MVP 与实盘对接：见 [restructuring_plan.md](restructuring_plan.md)、[deferred_authorization.md](deferred_authorization.md)。
+
+Mock 盘点与 real 切换说明：[UC09_REAL_PATH_MOCK_INVENTORY.md](UC09_REAL_PATH_MOCK_INVENTORY.md)。精简版当前状态见 [../operations.md](../operations.md)。

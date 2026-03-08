@@ -21,9 +21,9 @@
 - `cli.py` — 增加 weekly-paper 子命令
 - `src/ai_trading_research_system/control/command_router.py` — 增加 weekly_autonomous_paper
 - `src/ai_trading_research_system/pipeline/openclaw_adapter.py` — run_weekly_paper_report
-- `docs/operations/current_state.md` — UC-09 支持说明
-- `docs/integration/openclaw_integration.md` — weekly_autonomous_paper 入口
-- `docs/core_concepts/result_schema.md` — 周报/UC-09 输出字段
+- `docs/operations.md` — UC-09 支持说明
+- `docs/uc09_weekly_autonomous_paper.md` — weekly_autonomous_paper 入口
+- `docs/core_concepts.md` — 周报/UC-09 输出字段
 
 ## 分步执行（已完成）
 1. 第一阶段：autonomous/* 六个能力 ✓
@@ -38,7 +38,7 @@
 
 ### 1. 修改过的文件列表
 - **新增**：`src/ai_trading_research_system/autonomous/`（schemas, account_snapshot, mandate, allocator, state_machine, benchmark, weekly_report, __init__.py）；`pipeline/weekly_paper_pipe.py`；`scripts/run_weekly_autonomous_paper.py`；`scripts/verify_uc09_weekly_autonomous_paper.py`
-- **修改**：`cli.py`（weekly-paper）；`control/command_router.py`（RoutedCommand + route_intent）；`control/skill_interface.py`（execute weekly_autonomous_paper）；`pipeline/openclaw_adapter.py`（run_weekly_paper_report）；`docs/operations/current_state.md`；`docs/integration/openclaw_integration.md`；`docs/core_concepts/result_schema.md`；`docs/archive/next_phase_interface.md`
+- **修改**：`cli.py`（weekly-paper）；`control/command_router.py`（RoutedCommand + route_intent）；`control/skill_interface.py`（execute weekly_autonomous_paper）；`pipeline/openclaw_adapter.py`（run_weekly_paper_report）；`docs/operations.md`；`docs/uc09_weekly_autonomous_paper.md`；`docs/core_concepts.md`；`docs/archive/next_phase_interface.md`
 
 ### 2. 新增入口命令
 - CLI：`python cli.py weekly-paper [--capital 10000] [--benchmark SPY] [--days 5] [--mock]`

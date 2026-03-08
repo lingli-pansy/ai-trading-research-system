@@ -1,4 +1,4 @@
-# System Architecture Overview（目标架构）
+# System Architecture（目标架构）
 
 本文定义 AI Trading Research System 的**目标架构**，仅描述最终形态。
 
@@ -79,4 +79,4 @@ flowchart TB
 12. **Experience Store** — 学习数据持久化
 13. **Strategy Refiner** — 经验驱动策略进化
 
-详见 [agent_loop.md](agent_loop.md)、[user_journey.md](user_journey.md)。
+详见 [archive/Agent_Loop_and_Interaction.md](archive/Agent_Loop_and_Interaction.md)、[archive/User_Journey.md](archive/User_Journey.md)。

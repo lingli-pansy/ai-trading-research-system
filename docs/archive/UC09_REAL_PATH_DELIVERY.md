@@ -15,9 +15,9 @@
 | `scripts/run_weekly_autonomous_paper.py` | 默认不加 mock（real）；--mock 时 mock |
 | `scripts/verify_uc09_mock.py` | 新增：mock 回归验证 |
 | `scripts/verify_uc09_real.py` | 新增：真实联调验证 |
-| `docs/operations/current_state.md` | 默认 real、验证脚本、调试与降级说明 |
-| `docs/integration/openclaw_integration.md` | weekly-paper 默认真实、JSON 含 source 字段 |
-| `docs/core_concepts/result_schema.md` | benchmark_source、snapshot/market_data_source 说明 |
+| `docs/operations.md` | 默认 real、验证脚本、调试与降级说明 |
+| `docs/uc09_weekly_autonomous_paper.md` | weekly-paper 默认真实、JSON 含 source 字段 |
+| `docs/core_concepts.md` | benchmark_source、snapshot/market_data_source 说明 |
 | `docs/archive/UC09_IMPLEMENTATION_PLAN.md` | 第 6 节 Real 路径切换与验证 |
 
 ## 2. 每一步的验收方式
@@ -28,7 +28,7 @@
 - **第四步**：不加 --mock 时周报与 summary 中 `benchmark_return` 非固定 0，`benchmark_source: yfinance`（或取数失败时为 mock）。
 - **第五步**：`python scripts/run_weekly_autonomous_paper.py --capital 10000 --benchmark SPY` 输出 JSON 含 snapshot_source、market_data_source、benchmark_source。
 - **第六步**：在项目 venv 下运行（如 `.venv/bin/python scripts/verify_uc09_mock.py`）或 `pip install -e .` 后运行；`verify_uc09_real.py` 需网络（yfinance）。
-- **第七步**：current_state、openclaw_integration、result_schema、UC09_IMPLEMENTATION_PLAN 已更新。
+- **第七步**：operations.md、uc09_weekly_autonomous_paper.md、core_concepts.md、UC09_IMPLEMENTATION_PLAN 已更新。
 
 ## 3. 已从 mock 切到 real 的路径
 
