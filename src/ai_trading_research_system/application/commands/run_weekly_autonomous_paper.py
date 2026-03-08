@@ -18,8 +18,9 @@ def run_weekly_autonomous_paper(
     use_mock: bool = False,
     use_llm: bool = False,
     report_dir: Path | None = None,
+    symbols: list[str] | None = None,
 ) -> WeeklyPaperResult:
-    """Run weekly autonomous paper pipeline; returns WeeklyPaperResult."""
+    """Run weekly autonomous paper pipeline; symbols = watchlist/universe，空则默认单 symbol。"""
     return _run_pipe(
         capital=capital,
         benchmark=benchmark,
@@ -28,4 +29,5 @@ def run_weekly_autonomous_paper(
         use_mock=use_mock,
         use_llm=use_llm,
         report_dir=report_dir,
+        symbols=symbols,
     )

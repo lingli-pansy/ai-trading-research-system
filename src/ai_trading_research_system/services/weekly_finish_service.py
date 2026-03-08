@@ -36,6 +36,8 @@ def finish_week(
     use_mock: bool,
     state: str,
     report_dir: Path,
+    turnover_pct: float = 0.0,
+    max_drawdown: float = 0.0,
 ) -> Any:
     """
     After execution loop: compute benchmark, write report, build summary, return WeeklyPaperResult.
@@ -52,7 +54,7 @@ def finish_week(
     bench_result = compare_to_benchmark(
         portfolio_return=portfolio_return,
         benchmark_return=benchmark_return,
-        max_drawdown=0.0,
+        max_drawdown=max_drawdown,
         trade_count=total_trades,
         period=f"day_0_to_{duration_days}",
         benchmark_source=benchmark_source,
@@ -67,6 +69,7 @@ def finish_week(
         no_trade_reasons=no_trade_reasons[:5],
         daily_research=daily_research,
         report_dir=report_dir,
+        turnover_pct=turnover_pct,
     )
     market_data_source = "mock" if use_mock else "yfinance"
     summary = build_weekly_result_summary(

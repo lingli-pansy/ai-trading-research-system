@@ -25,7 +25,7 @@ class AccountSnapshot:
 
 @dataclass
 class WeeklyTradingMandate:
-    """用户目标的结构化表示（一周自治 Paper）。"""
+    """用户目标的结构化表示（一周自治 Paper）。watchlist 为可选标的池，空则用默认单 symbol。"""
     mandate_id: str
     mode: str = "paper"
     capital_limit: float = 10_000.0
@@ -37,6 +37,7 @@ class WeeklyTradingMandate:
     max_positions: int = 5
     cash_reserve_pct: float = 0.1
     stop_conditions: list[str] = field(default_factory=list)  # e.g. ["max_drawdown_5pct", "kill_switch"]
+    watchlist: list[str] = field(default_factory=lambda: ["NVDA"])  # 标的池；UC-09 多 symbol 入口
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -51,4 +52,5 @@ class WeeklyTradingMandate:
             "max_positions": self.max_positions,
             "cash_reserve_pct": self.cash_reserve_pct,
             "stop_conditions": self.stop_conditions,
+            "watchlist": self.watchlist,
         }

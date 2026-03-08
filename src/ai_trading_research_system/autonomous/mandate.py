@@ -15,8 +15,9 @@ def mandate_from_cli(
     auto_confirm: bool = True,
     max_positions: int = 5,
     cash_reserve_pct: float = 0.1,
+    watchlist: list[str] | None = None,
 ) -> WeeklyTradingMandate:
-    """从 CLI 参数直接构造 mandate。"""
+    """从 CLI 参数直接构造 mandate。watchlist 为空时使用默认单 symbol。"""
     return WeeklyTradingMandate(
         mandate_id=f"mandate_{uuid.uuid4().hex[:12]}",
         mode="paper",
@@ -29,6 +30,7 @@ def mandate_from_cli(
         max_positions=max_positions,
         cash_reserve_pct=cash_reserve_pct,
         stop_conditions=["kill_switch"],
+        watchlist=watchlist if watchlist else ["NVDA"],
     )
 
 

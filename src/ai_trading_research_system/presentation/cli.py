@@ -64,6 +64,7 @@ def main() -> int:
     p_weekly.add_argument("--capital", type=float, default=10000, help="Capital limit (default 10000)")
     p_weekly.add_argument("--benchmark", default="SPY", help="Benchmark symbol (default SPY)")
     p_weekly.add_argument("--days", type=int, default=5, help="Trading days (default 5)")
+    p_weekly.add_argument("--symbols", default=None, help="Comma-separated watchlist (default: NVDA)")
     p_weekly.add_argument("--auto-confirm", action="store_true", default=True, dest="auto_confirm", help="Auto confirm trades (default True)")
     p_weekly.add_argument("--no-auto-confirm", action="store_false", dest="auto_confirm", help="Disable auto confirm")
     _add_common(p_weekly)

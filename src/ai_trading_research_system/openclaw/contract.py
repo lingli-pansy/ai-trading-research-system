@@ -48,6 +48,7 @@ class WeeklyAutonomousPaperInput(CommandInputBase):
     benchmark: str = "SPY"
     duration: int = 5
     auto_confirm: bool = True
+    symbols: list[str] | None = None  # watchlist / universe；空则默认 ["NVDA"]
 
 
 class WeeklyReportInput(CommandInputBase):

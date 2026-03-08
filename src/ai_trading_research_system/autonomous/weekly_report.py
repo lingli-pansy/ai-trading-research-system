@@ -12,13 +12,14 @@ from ai_trading_research_system.autonomous.schemas import WeeklyTradingMandate
 
 @dataclass
 class WeeklyReport:
-    """周报结构。"""
+    """周报结构；组合层指标：portfolio_return, benchmark_return, excess_return, max_drawdown, turnover, trade_count。"""
     mandate_id: str
     period: str
     portfolio_return_pct: float
     benchmark_return_pct: float
     excess_return_pct: float
     max_drawdown_pct: float
+    turnover_pct: float  # 组合换手率
     trade_count: int
     key_trades: list[str]  # 简要描述
     risk_events: list[str]
@@ -42,6 +43,7 @@ class WeeklyReportGenerator:
         no_trade_days: int = 0,
         no_trade_reasons: list[str] | None = None,
         daily_research: list[dict[str, Any]] | None = None,
+        turnover_pct: float = 0.0,
     ) -> WeeklyReport:
         key_trades = key_trades or []
         risk_events = risk_events or []
@@ -61,6 +63,7 @@ class WeeklyReportGenerator:
             benchmark_return_pct=benchmark_result.benchmark_return * 100,
             excess_return_pct=benchmark_result.excess_return * 100,
             max_drawdown_pct=benchmark_result.max_drawdown * 100,
+            turnover_pct=turnover_pct,
             trade_count=benchmark_result.trade_count,
             key_trades=key_trades,
             risk_events=risk_events,

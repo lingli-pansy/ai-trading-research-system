@@ -184,6 +184,9 @@ def kwargs_for_task(task: str, args: Any) -> dict[str, Any]:
             "project_root": Path.cwd(),
         }
     if task == "weekly_autonomous_paper":
+        syms = getattr(args, "symbols", None)
+        if isinstance(syms, str):
+            syms = [s.strip() for s in syms.split(",") if s.strip()]
         return {
             **base,
             "capital": getattr(args, "capital", 10000),
@@ -191,6 +194,7 @@ def kwargs_for_task(task: str, args: Any) -> dict[str, Any]:
             "duration_days": getattr(args, "days", 5),
             "auto_confirm": getattr(args, "auto_confirm", True),
             "report_dir": Path.cwd() / "reports",
+            "symbols": syms if syms else None,
         }
     if task == "weekly_report":
         return {"report_dir": Path.cwd() / "reports"}

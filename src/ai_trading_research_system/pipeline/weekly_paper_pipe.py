@@ -21,6 +21,7 @@ from ai_trading_research_system.strategy.translator import ContractTranslator
 from ai_trading_research_system.execution.nautilus_paper_runner import NautilusPaperRunner
 from ai_trading_research_system.services.experience_service import write_weekly_run
 from ai_trading_research_system.services.weekly_finish_service import finish_week
+from ai_trading_research_system.services.regime_context import get_regime_context
 
 
 @dataclass
@@ -46,16 +47,18 @@ def run_weekly_autonomous_paper(
     use_mock: bool = False,
     use_llm: bool = False,
     report_dir: Path | None = None,
+    symbols: list[str] | None = None,
 ) -> WeeklyPaperResult:
     """
     执行一周自治 paper：mandate → snapshot → 多轮 research/allocator/paper → benchmark_service → report_service。
-    Experience 写入由 experience_service 完成。
+    symbols 为 watchlist/universe，进入 mandate.watchlist；空则默认单 symbol。Experience 写入由 experience_service 完成。
     """
     mandate = mandate_from_cli(
         capital=capital,
         benchmark=benchmark,
         duration_days=duration_days,
         auto_confirm=auto_confirm,
+        watchlist=symbols,
     )
     sm = AutonomousExecutionStateMachine()
     sm.start()
@@ -63,7 +66,7 @@ def run_weekly_autonomous_paper(
     allocator = PortfolioAllocator(max_position_pct=0.25)
     orchestrator = ResearchOrchestrator(use_mock=use_mock, use_llm=use_llm)
     translator = ContractTranslator()
-    symbols = ["NVDA"]
+    symbols_list = mandate.watchlist
     total_pnl = 0.0
     total_trades = 0
     run_ids: list[int] = []
@@ -71,10 +74,11 @@ def run_weekly_autonomous_paper(
     no_trade_reasons: list[str] = []
     daily_research: list[dict[str, Any]] = []
 
+    spy_trend, vix_level = get_regime_context(use_mock)
     for day in range(duration_days):
         day_pnl = 0.0
         day_trades = 0
-        for sym in symbols:
+        for sym in symbols_list:
             context, contract = orchestrator.run_with_context(sym)
             daily_research.append({
                 "day": day,
@@ -117,6 +121,8 @@ def run_weekly_autonomous_paper(
                     "price_summary": context.price_summary,
                 },
                 regime_tag="weekly_paper",
+                spy_trend=spy_trend,
+                vix_level=vix_level,
             )
             run_ids.append(run_id)
         total_pnl += day_pnl
@@ -124,6 +130,7 @@ def run_weekly_autonomous_paper(
 
     sm.complete_week()
     report_dir = report_dir or Path(".")
+    turnover_pct = min(100.0, 10.0 * total_trades) if total_trades else 0.0
     return finish_week(
         mandate=mandate,
         capital=capital,
@@ -139,4 +146,6 @@ def run_weekly_autonomous_paper(
         use_mock=use_mock,
         state=sm.state,
         report_dir=report_dir,
+        turnover_pct=turnover_pct,
+        max_drawdown=0.0,
     )

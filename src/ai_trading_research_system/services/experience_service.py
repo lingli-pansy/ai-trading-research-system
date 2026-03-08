@@ -17,9 +17,17 @@ def write_weekly_run(
     extra: dict[str, Any],
     *,
     regime_tag: str = "weekly_paper",
+    spy_trend: str | None = None,
+    vix_level: str | None = None,
 ) -> int:
-    """Write one weekly paper run to Experience Store. Returns strategy_run id."""
+    """Write one weekly paper run to Experience Store. regime_tag, spy_trend, vix_level 写入 parameters。Returns strategy_run id."""
     start_d = datetime.now(timezone.utc).date().isoformat()
+    merged = dict(extra)
+    merged["regime_tag"] = regime_tag
+    if spy_trend is not None:
+        merged["spy_trend"] = spy_trend
+    if vix_level is not None:
+        merged["vix_level"] = vix_level
     payload = RunResultPayload(
         symbol=symbol,
         start_date=start_d,
@@ -29,7 +37,7 @@ def write_weekly_run(
         win_rate=0.0,
         pnl=pnl,
         trade_count=trade_count,
-        extra=extra,
+        extra=merged,
         regime_tag=regime_tag,
     )
     return write_run_result(payload)
