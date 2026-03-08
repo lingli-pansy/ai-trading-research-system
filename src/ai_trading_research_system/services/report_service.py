@@ -42,6 +42,7 @@ def generate_and_write(
     cycle_number: int = 0,
     policy_version: str = "",
     system_snapshot_at_week_end: dict[str, Any] | None = None,
+    replay_analysis: dict[str, Any] | None = None,
 ) -> str:
     """Generate weekly report and write to report_dir/weekly_report_{mandate_id}.json. Returns path."""
     if policy_used is None and getattr(mandate, "policy", None) is not None:
@@ -80,6 +81,7 @@ def generate_and_write(
         cycle_number=cycle_number or 0,
         policy_version=policy_version or "",
         system_snapshot_at_week_end=system_snapshot_at_week_end or {},
+        replay_analysis=replay_analysis or {},
     )
     report_dir = report_dir or Path(".")
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -101,6 +103,8 @@ def build_weekly_result_summary(
     snapshot_source: str,
     market_data_source: str,
     benchmark_source: str,
+    max_drawdown: float = 0.0,
+    turnover_pct: float = 0.0,
 ) -> dict[str, Any]:
     """Build the summary dict for WeeklyPaperResult. Used by weekly_paper_pipe only for result assembly."""
     return {
@@ -115,4 +119,6 @@ def build_weekly_result_summary(
         "snapshot_source": snapshot_source,
         "market_data_source": market_data_source,
         "benchmark_source": benchmark_source,
+        "max_drawdown": max_drawdown,
+        "turnover_pct": turnover_pct,
     }

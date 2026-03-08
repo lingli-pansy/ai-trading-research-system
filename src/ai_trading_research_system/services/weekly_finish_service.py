@@ -193,6 +193,8 @@ def finish_week(
         snapshot_source=snapshot_source,
         market_data_source=market_data_source,
         benchmark_source=benchmark_source,
+        max_drawdown=max_drawdown,
+        turnover_pct=turnover_pct,
     )
     return WeeklyPaperResult(
         ok=True,
