@@ -72,9 +72,11 @@ def finish_week(
     WeeklyPaperResult = _result_type()
     portfolio_return = total_pnl / capital if capital else 0.0
     reject_mock = not use_mock  # 联调模式：拒绝 mock，取数失败则 raise
+    # 收益计算需至少 2 根 bar；--days 1 时 lookback_days=1 只拉 1 根，强制至少 2 日
+    lookback_for_benchmark = max(2, duration_days)
     benchmark_return, benchmark_source = get_benchmark_return(
         symbol=benchmark,
-        lookback_days=duration_days,
+        lookback_days=lookback_for_benchmark,
         reject_mock=reject_mock,
     )
     if use_mock:

@@ -242,3 +242,42 @@ RuntimeError: Reject mock: benchmark data from IB required. Check IB Gateway and
 **UC-09 是否完成？** **NO**
 
 两轮均在 `finish_week` 内 `get_benchmark_return(lookback_days=1)` 处因“1 日仅 1 根 bar、不满足至少 2 根”返回空并触发 reject_mock 抛错，未生成周报、未写 decision trace、未写 experience store。阻塞点与最小修复方案见第 4、5、7.4 节，未实施修复前 UC-09 real mode 不通过。
+
+---
+
+## 9. 修复后验收（1-day benchmark 边界修复）
+
+**修复**: `weekly_finish_service.finish_week` 内使用 `lookback_for_benchmark = max(2, duration_days)` 调用 `get_benchmark_return`，保证至少 2 根 bar 用于收益计算。reject_mock 语义不变。
+
+**验收时间**: 2026-03-08
+
+### 9.1 运行一：`weekly-paper --symbols SPY --days 1`
+
+| 指标 | 值 |
+|------|-----|
+| snapshot_source | ibkr |
+| benchmark_source | ib |
+| report_path | 已生成（reports/weekly_report_mandate_*.json） |
+| decision_traces_summary | 已写入 |
+| final status | exit 0，ok=true |
+
+### 9.2 运行二：`weekly-paper --symbols SPY,QQQ,NVDA --days 1 --llm`
+
+| 指标 | 值 |
+|------|-----|
+| snapshot_source | ibkr |
+| benchmark_source | ib |
+| report_path | 已生成 |
+| decision_traces_summary | 已写入 |
+| final status | exit 0，ok=true |
+
+### 9.3 结论
+
+**UC-09 real mode（修复后）**: **通过**
+
+- snapshot_source != mock ✅  
+- benchmark loaded ✅  
+- weekly report generated ✅  
+- decision trace written ✅  
+- experience store updated ✅  
+- final status = success ✅  
