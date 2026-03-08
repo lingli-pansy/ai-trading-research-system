@@ -19,6 +19,7 @@ from ai_trading_research_system.autonomous.schemas import WeeklyTradingMandate, 
 from ai_trading_research_system.autonomous.opportunity_ranking import OpportunityRanking, OpportunityScore
 from ai_trading_research_system.autonomous.trigger_evaluator import evaluate_intraday_triggers
 from ai_trading_research_system.research.orchestrator import ResearchOrchestrator
+from ai_trading_research_system.research.schemas import DecisionContract, ResearchContext
 from ai_trading_research_system.strategy.translator import ContractTranslator
 from ai_trading_research_system.execution.nautilus_paper_runner import NautilusPaperRunner
 from ai_trading_research_system.services.experience_service import write_weekly_run
@@ -63,10 +64,11 @@ def run_weekly_autonomous_paper(
     experiment_id: str = "",
     cycle_number: int = 0,
     policy_version: str = "",
+    recorded_research_by_symbol: dict[str, dict[str, Any]] | None = None,
 ) -> WeeklyPaperResult:
     """
     执行一周自治 paper：mandate → snapshot → 每日 research all → rank → allocator → execution。
-    mandate 可选；未传则 mandate_from_cli。symbols 为 watchlist；空则默认单 symbol。
+    recorded_research_by_symbol 若提供则用已记录 reasoning 替代调用 LLM（Replay 兼容）。
     """
     if mandate is None:
         mandate = mandate_from_cli(
@@ -111,8 +113,21 @@ def run_weekly_autonomous_paper(
     for day in range(duration_days):
         contracts_for_day: list[tuple[str, Any, Any]] = []
         for sym in symbols_list:
-            context, contract = orchestrator.run_with_context(sym)
-            contracts_for_day.append((sym, context, contract))
+            if recorded_research_by_symbol and sym in recorded_research_by_symbol:
+                rec = recorded_research_by_symbol.get(sym) or {}
+                contract = DecisionContract(
+                    symbol=sym,
+                    thesis=rec.get("research_thesis", ""),
+                    key_drivers=list(rec.get("research_key_drivers", []) or []),
+                    risk_flags=list(rec.get("research_risk_factors", []) or []),
+                    confidence="medium",
+                    suggested_action="allow_entry",
+                )
+                context = ResearchContext(symbol=sym, price_summary="", fundamentals_summary="", news_summaries=[])
+                contracts_for_day.append((sym, context, contract))
+            else:
+                context, contract = orchestrator.run_with_context(sym)
+                contracts_for_day.append((sym, context, contract))
             daily_research.append({
                 "day": day,
                 "symbol": sym,
@@ -141,6 +156,9 @@ def run_weekly_autonomous_paper(
                 "size_fraction": signal.allowed_position_size,
                 "rationale": signal.rationale,
                 "score": o.score,
+                "research_thesis": getattr(contract, "thesis", "") or "",
+                "research_key_drivers": list(getattr(contract, "key_drivers", []) or [])[:10],
+                "research_risk_factors": list(getattr(contract, "risk_flags", []) or []),
             })
         opportunity_ranking_week = [{"symbol": o.symbol, "score": o.score, "confidence": o.confidence, "risk": o.risk} for o in ranked]
         spy_returns, bench_ret_day, vol_day, max_dd_day = get_benchmark_returns_and_volatility(

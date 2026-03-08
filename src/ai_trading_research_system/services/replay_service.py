@@ -101,6 +101,24 @@ def run_experiment_replay(
         watchlist=symbols or ["NVDA"],
         policy=policy,
     )
+    recorded_research_by_symbol: dict[str, dict[str, Any]] | None = None
+    if cycle:
+        snap = read_latest_decision_traces_snapshot(experiment_id=source_experiment_id, db_path=db_path)
+        if snap:
+            traces = snap.get("traces") or []
+            by_sym: dict[str, dict[str, Any]] = {}
+            for t in traces:
+                sym = t.get("symbol", "")
+                if not sym or sym in by_sym:
+                    continue
+                if t.get("research_thesis") or t.get("research_key_drivers") or t.get("research_risk_factors"):
+                    by_sym[sym] = {
+                        "research_thesis": t.get("research_thesis", ""),
+                        "research_key_drivers": list(t.get("research_key_drivers") or []),
+                        "research_risk_factors": list(t.get("research_risk_factors") or []),
+                    }
+            if by_sym:
+                recorded_research_by_symbol = by_sym
     now_start = datetime.now(timezone.utc).isoformat()
     result: WeeklyPaperResult = run_weekly_autonomous_paper(
         mandate=mandate,
@@ -113,6 +131,7 @@ def run_experiment_replay(
         experiment_id=replay_id,
         cycle_number=0,
         policy_version=policy_version or "replay",
+        recorded_research_by_symbol=recorded_research_by_symbol,
     )
     now_end = datetime.now(timezone.utc).isoformat()
     replay_start_actual = replay_start or now_start

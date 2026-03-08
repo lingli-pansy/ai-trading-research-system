@@ -50,6 +50,7 @@ class WeeklyReport:
     replay_analysis: dict[str, Any] = field(default_factory=dict)
     decision_traces_summary: dict[str, Any] = field(default_factory=dict)
     evolution_guardrail_summary: dict[str, Any] = field(default_factory=dict)
+    research_reasoning_summary: dict[str, Any] = field(default_factory=dict)
 
 
 class WeeklyReportGenerator:
@@ -87,6 +88,7 @@ class WeeklyReportGenerator:
         replay_analysis: dict[str, Any] | None = None,
         decision_traces_summary: dict[str, Any] | None = None,
         evolution_guardrail_summary: dict[str, Any] | None = None,
+        research_reasoning_summary: dict[str, Any] | None = None,
     ) -> WeeklyReport:
         key_trades = key_trades or []
         risk_events = risk_events or []
@@ -117,6 +119,7 @@ class WeeklyReportGenerator:
         replay_analysis = replay_analysis or {}
         decision_traces_summary = decision_traces_summary or {}
         evolution_guardrail_summary = evolution_guardrail_summary or {}
+        research_reasoning_summary = research_reasoning_summary or {}
         if benchmark_result.excess_return > 0.02:
             suggestion = "组合跑赢基准，可维持当前风险偏好。"
         elif benchmark_result.trade_count == 0:
@@ -160,6 +163,7 @@ class WeeklyReportGenerator:
             replay_analysis=replay_analysis,
             decision_traces_summary=decision_traces_summary,
             evolution_guardrail_summary=evolution_guardrail_summary,
+            research_reasoning_summary=research_reasoning_summary,
         )
 
     def to_dict(self, report: WeeklyReport) -> dict[str, Any]:

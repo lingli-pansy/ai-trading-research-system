@@ -45,6 +45,7 @@ def generate_and_write(
     replay_analysis: dict[str, Any] | None = None,
     decision_traces_summary: dict[str, Any] | None = None,
     evolution_guardrail_summary: dict[str, Any] | None = None,
+    research_reasoning_summary: dict[str, Any] | None = None,
 ) -> str:
     """Generate weekly report and write to report_dir/weekly_report_{mandate_id}.json. Returns path."""
     if policy_used is None and getattr(mandate, "policy", None) is not None:
@@ -86,6 +87,7 @@ def generate_and_write(
         replay_analysis=replay_analysis or {},
         decision_traces_summary=decision_traces_summary or {},
         evolution_guardrail_summary=evolution_guardrail_summary or {},
+        research_reasoning_summary=research_reasoning_summary or {},
     )
     report_dir = report_dir or Path(".")
     report_dir.mkdir(parents=True, exist_ok=True)

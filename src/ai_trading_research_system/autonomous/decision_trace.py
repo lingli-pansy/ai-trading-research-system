@@ -10,7 +10,7 @@ from typing import Any
 
 @dataclass
 class DecisionTrace:
-    """单次分配决策的可追溯记录。"""
+    """单次分配决策的可追溯记录；含 LLM research reasoning（thesis / key_drivers / risk_factors）。"""
     timestamp: str
     symbol: str
     opportunity_score: float
@@ -19,6 +19,12 @@ class DecisionTrace:
     trigger_context: dict[str, Any]
     allocator_reason: str
     final_action: str  # replace | retain | rejected | rebalance | no_trade
+    research_thesis: str = ""
+    """DecisionContract 中的 thesis（研究结论）。"""
+    research_key_drivers: list[str] = field(default_factory=list)
+    """DecisionContract 中的 key_drivers。"""
+    research_risk_factors: list[str] = field(default_factory=list)
+    """DecisionContract 中的 risk_flags，作为 research risk factors。"""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -30,6 +36,9 @@ class DecisionTrace:
             "trigger_context": self.trigger_context,
             "allocator_reason": self.allocator_reason,
             "final_action": self.final_action,
+            "research_thesis": self.research_thesis,
+            "research_key_drivers": self.research_key_drivers,
+            "research_risk_factors": self.research_risk_factors,
         }
 
 

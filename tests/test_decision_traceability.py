@@ -85,3 +85,47 @@ def test_trace_contains_health_context():
     tt = trigger_trace.to_dict()
     assert "health_context" in tt
     assert tt["health_context"] is not None
+
+
+def test_decision_trace_contains_research_reasoning():
+    """DecisionTrace 含 research_thesis、research_key_drivers、research_risk_factors（来自 DecisionContract reasoning）。"""
+    policy = default_policy()
+    mandate = WeeklyTradingMandate(mandate_id="m1", watchlist=["OLD", "NVDA"], policy=policy, max_positions=1)
+    snapshot = AccountSnapshot(
+        cash=5_000,
+        equity=10_000,
+        positions=[{"symbol": "OLD", "quantity": 10, "market_value": 2_000}],
+        open_orders=[],
+        risk_budget=1000,
+        timestamp="2024-01-01T12:00:00",
+        source="mock",
+    )
+    allocator = PortfolioAllocator(max_position_pct=0.25)
+    signals_with_research = [
+        {"symbol": "OLD", "score": 0.3, "size_fraction": 0.2, "rationale": "incumbent"},
+        {
+            "symbol": "NVDA",
+            "score": 0.75,
+            "size_fraction": 0.2,
+            "rationale": "LLM thesis",
+            "research_thesis": "Strong demand and margin resilience support upside.",
+            "research_key_drivers": ["revenue growth", "data center"],
+            "research_risk_factors": ["valuation_risk"],
+        },
+    ]
+    result = allocator.allocate(
+        snapshot,
+        mandate,
+        signals=signals_with_research,
+        portfolio_health=None,
+        trigger_context={},
+    )
+    assert result.decision_traces
+    trace_with_research = next(
+        (t for t in result.decision_traces if t.get("symbol") == "NVDA" and (t.get("research_thesis") or t.get("research_key_drivers") or t.get("research_risk_factors"))),
+        None,
+    )
+    assert trace_with_research is not None
+    assert trace_with_research.get("research_thesis") == "Strong demand and margin resilience support upside."
+    assert trace_with_research.get("research_key_drivers") == ["revenue growth", "data center"]
+    assert trace_with_research.get("research_risk_factors") == ["valuation_risk"]

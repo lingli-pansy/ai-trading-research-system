@@ -286,6 +286,13 @@ class PortfolioAllocator:
             "rejected_due_to_threshold": replacements_skipped_threshold,
         }
 
+        def _research_from_signal(s: dict[str, Any]) -> tuple[str, list[str], list[str]]:
+            return (
+                str(s.get("research_thesis") or ""),
+                list(s.get("research_key_drivers") or []),
+                list(s.get("research_risk_factors") or []),
+            )
+
         signal_by_symbol = {s.get("symbol"): s for s in signals if s.get("symbol")}
         policy_constraints = _policy_ctx(policy)
         health_context = _health_ctx()
@@ -293,14 +300,18 @@ class PortfolioAllocator:
         decision_traces_list: list[dict[str, Any]] = []
         for dec in replacement_decisions:
             sym = dec.get("symbol_in", "")
-            score = float(signal_by_symbol.get(sym, {}).get("score", 0) or 0)
+            sig = signal_by_symbol.get(sym, {})
+            score = float(sig.get("score", 0) or 0)
             reason = dec.get("reason", "replace")
-            decision_traces_list.append(DecisionTrace(_now(), sym, score, health_context, policy_constraints, tr_ctx, reason, "replace").to_dict())
+            thesis, drivers, risks = _research_from_signal(sig)
+            decision_traces_list.append(DecisionTrace(_now(), sym, score, health_context, policy_constraints, tr_ctx, reason, "replace", research_thesis=thesis, research_key_drivers=drivers, research_risk_factors=risks).to_dict())
         for rej in rejected_opportunities:
             sym = rej.get("symbol", "")
+            sig = signal_by_symbol.get(sym, {})
             score = float(rej.get("score", 0) or 0)
             reason = rej.get("reason", "rejected")
-            decision_traces_list.append(DecisionTrace(_now(), sym, score, health_context, policy_constraints, tr_ctx, reason, "rejected").to_dict())
+            thesis, drivers, risks = _research_from_signal(sig)
+            decision_traces_list.append(DecisionTrace(_now(), sym, score, health_context, policy_constraints, tr_ctx, reason, "rejected", research_thesis=thesis, research_key_drivers=drivers, research_risk_factors=risks).to_dict())
         decision_traces_list.append(DecisionTrace(_now(), "", 0.0, health_context, policy_constraints, tr_ctx, " ".join(rationale_parts), "rebalance" if targets else "no_trade").to_dict())
 
         return AllocationResult(

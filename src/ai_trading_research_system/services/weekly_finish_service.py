@@ -132,6 +132,24 @@ def finish_week(
         "traces": decision_traces,
         "trigger_traces": trigger_traces,
     }
+    seen_sym: set[str] = set()
+    research_per_symbol: list[dict[str, Any]] = []
+    for t in decision_traces:
+        sym = t.get("symbol", "")
+        if not sym or sym in seen_sym:
+            continue
+        if t.get("research_thesis") or t.get("research_key_drivers") or t.get("research_risk_factors"):
+            seen_sym.add(sym)
+            research_per_symbol.append({
+                "symbol": sym,
+                "research_thesis": t.get("research_thesis", ""),
+                "research_key_drivers": t.get("research_key_drivers", []) or [],
+                "research_risk_factors": t.get("research_risk_factors", []) or [],
+            })
+    research_reasoning_summary = {
+        "per_symbol": research_per_symbol,
+        "summary": f"本周决策依据 {len(research_per_symbol)} 个标的的 research reasoning。" if research_per_symbol else "本周无 research reasoning 记录。",
+    }
     report_path = report_generate_and_write(
         mandate,
         bench_result,
@@ -162,6 +180,7 @@ def finish_week(
         system_snapshot_at_week_end=system_snapshot_at_week_end,
         decision_traces_summary=decision_traces_summary,
         evolution_guardrail_summary=evolution_guardrail_summary,
+        research_reasoning_summary=research_reasoning_summary,
     )
     if portfolio_health:
         write_portfolio_health_snapshot(mandate_id=mandate.mandate_id, period=period, snapshot=portfolio_health)
