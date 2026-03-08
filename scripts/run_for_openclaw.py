@@ -1,16 +1,7 @@
 #!/usr/bin/env python3
 """
-OpenClaw-callable entry: run research / backtest / demo / weekly_autonomous_paper / weekly_report; print single JSON to stdout.
-Usage:
-  python scripts/run_for_openclaw.py research SYMBOL [--mock] [--llm]
-  python scripts/run_for_openclaw.py backtest SYMBOL [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--mock] [--llm]
-  python scripts/run_for_openclaw.py demo SYMBOL [--mock] [--llm]
-  python scripts/run_for_openclaw.py weekly_autonomous_paper [--capital 10000] [--benchmark SPY] [--days 5] [--mock] [--llm]
-  python scripts/run_for_openclaw.py weekly_report [--capital 10000] [--benchmark SPY] [--days 5] [--mock] [--llm]
-
-Output: single JSON object to stdout. Unified format for weekly commands:
-  { "ok": true, "command": "...", "mandate_id": "...", "status": "...", "report_path": "...", "engine_type": "...", "used_nautilus": true, "snapshot_source": "...", "benchmark_source": "..." }
-Errors: stderr JSON line + non-zero exit.
+OpenClaw-callable entry: run skills from registry; print single JSON to stdout.
+Task list from openclaw.registry; no hardcoded skill names.
 """
 from __future__ import annotations
 
@@ -19,24 +10,18 @@ import json
 import sys
 from pathlib import Path
 
-from ai_trading_research_system.openclaw.adapter import (
-    run_research_report,
-    run_backtest_report,
-    run_demo_report,
-    run_weekly_paper_report,
-)
+from ai_trading_research_system.application.command_registry import run as command_run
+from ai_trading_research_system.openclaw.adapter import format_result
 from ai_trading_research_system.openclaw.contract import error_to_dict
+from ai_trading_research_system.openclaw.registry import get_skill_names, kwargs_for_task
 
 
 def main() -> int:
+    skill_names = get_skill_names()
     parser = argparse.ArgumentParser(
         description="OpenClaw: run research/backtest/demo/weekly_autonomous_paper/weekly_report, output JSON to stdout"
     )
-    parser.add_argument(
-        "task",
-        choices=["research", "backtest", "demo", "weekly_autonomous_paper", "weekly_report"],
-        help="Task to run",
-    )
+    parser.add_argument("task", choices=skill_names, help="Task to run")
     parser.add_argument("symbol", nargs="?", default="NVDA", help="Symbol (default: NVDA; not used for weekly_*)")
     parser.add_argument("--start", default=None, help="Backtest start YYYY-MM-DD")
     parser.add_argument("--end", default=None, help="Backtest end YYYY-MM-DD")
@@ -48,49 +33,21 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        if args.task == "research":
-            report = run_research_report(args.symbol, use_mock=args.mock, use_llm=args.llm)
-            out = {**report, "ok": True, "command": "research"}
-        elif args.task == "backtest":
-            report = run_backtest_report(
-                args.symbol,
-                start_date=args.start,
-                end_date=args.end,
-                use_mock=args.mock,
-                use_llm=args.llm,
-            )
-            out = {**report, "ok": True, "command": "backtest"}
-        elif args.task == "demo":
-            report = run_demo_report(args.symbol, use_mock=args.mock, use_llm=args.llm)
-            out = {**report, "ok": True, "command": "demo"}
-        elif args.task == "weekly_autonomous_paper":
-            out = run_weekly_paper_report(
-                capital=args.capital,
-                benchmark=args.benchmark,
-                duration_days=args.days,
-                auto_confirm=True,
-                use_mock=args.mock,
-                use_llm=args.llm,
-            )
-        elif args.task == "weekly_report":
-            out = run_weekly_paper_report(
-                capital=args.capital,
-                benchmark=args.benchmark,
-                duration_days=args.days,
-                auto_confirm=True,
-                use_mock=args.mock,
-                use_llm=args.llm,
-            )
-            out = {**out, "command": "weekly_report"}
+        kwargs = kwargs_for_task(args.task, args)
+        report_dir = Path.cwd() / "reports"
+        if args.task in ("weekly_autonomous_paper", "weekly_report"):
+            report_dir.mkdir(parents=True, exist_ok=True)
         else:
-            err = error_to_dict(args.task, 1, f"unknown task: {args.task}")
-            print(json.dumps(err, ensure_ascii=False), file=sys.stderr)
-            return 1
-        # stdout: result JSON only
+            report_dir = None
+        result = command_run(args.task, report_dir=report_dir, **kwargs)
+        command_override = "weekly_report" if args.task == "weekly_report" else None
+        out = format_result(args.task, result, command_override=command_override, **kwargs)
+        if args.task in ("research", "backtest", "demo"):
+            out["ok"] = True
+            out["command"] = args.task
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return 0
     except Exception as e:
-        # stderr: error JSON only
         err = error_to_dict(args.task, 1, str(e))
         print(json.dumps(err, ensure_ascii=False), file=sys.stderr)
         return 1

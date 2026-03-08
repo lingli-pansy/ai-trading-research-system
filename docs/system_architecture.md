@@ -65,12 +65,12 @@ flowchart TB
 
 ## 入口与控制面（当前实现）
 
-**唯一业务入口**：OpenClaw / CLI → `application.commands`。
+**唯一业务入口**：`application.commands`。CLI 与 OpenClaw 均通过 `application.command_registry` 调用，禁止直接调用 pipeline。
 
-- **CLI**：`presentation/cli.py` 仅做参数解析、调用 command、渲染输出（`presentation/renderers`）；业务由 `application/commands` 执行。
-- **OpenClaw**：`openclaw/adapter`、`openclaw/commands` 将 skill 映射到 `application/commands`；persona/skills 见 `openclaw/persona.md`、`openclaw/skills.md`；**契约**见 `openclaw/contract.py`（可测试的 command input/output schema）。
-- **control/**：**兼容层，退场中**。新逻辑不得再接入 control；请使用 `openclaw.adapter` / `openclaw.commands`。
-- **UC-09**：`pipeline/weekly_paper_pipe` 仅做编排（snapshot → research → strategy → allocation → execution）；benchmark/report/experience/summary 由 `services/` 提供。
+- **CLI**：`presentation/cli.py` 仅做：解析参数 → `command_registry.run` → `renderers.render`。不包含业务逻辑、不调用 pipeline。
+- **OpenClaw**：`scripts/run_for_openclaw.py` 从 `openclaw.registry` 取 skill 列表，经 `command_registry.run` 执行，由 `openclaw.adapter.format_result` 转 JSON。persona/skills 见 `openclaw/persona.md`、`openclaw/skills.md`；**契约**见 `openclaw/contract.py`；**技能注册**见 `openclaw/registry.py`（`list_skills()`）。
+- **control/**：**已删除**。原 control 包已移除，入口仅为 command_registry + openclaw.adapter。
+- **UC-09**：`pipeline/weekly_paper_pipe` 仅做编排（mandate → snapshot → research → allocation → execution）；benchmark、report、summary 由 `services/weekly_finish_service` 等完成。
 
 ---
 

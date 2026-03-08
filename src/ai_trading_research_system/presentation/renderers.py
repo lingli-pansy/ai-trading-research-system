@@ -1,10 +1,38 @@
 """
-CLI renderers: turn command result objects into display lines.
-No business logic; only formatting for human-readable output.
+CLI renderers: turn command result objects into display lines or JSON dict.
+No business logic; only formatting. CLI calls render(command, result, args) only.
 """
 from __future__ import annotations
 
 from typing import Any
+
+# Return: list[str] for text output, dict for JSON output
+RenderOutput = list[str] | dict[str, Any]
+
+
+def render(command: str, result: Any, args: Any) -> RenderOutput:
+    """Single entry: dispatch by command name. Returns lines or dict for JSON."""
+    if command == "research":
+        return result.model_dump()
+    if command == "backtest":
+        return render_backtest(result, getattr(args, "symbol", "NVDA"))
+    if command == "paper":
+        return render_paper(result)
+    if command == "demo":
+        return render_demo(result, getattr(args, "symbol", "NVDA"))
+    if command == "weekly-paper":
+        return {
+            "ok": result.ok,
+            "mandate_id": result.mandate_id,
+            "status": result.status,
+            "capital_limit": result.capital_limit,
+            "benchmark": result.benchmark,
+            "engine_type": result.engine_type,
+            "used_nautilus": result.used_nautilus,
+            "report_path": result.report_path,
+            "summary": result.summary,
+        }
+    return []
 
 
 def render_backtest(result: Any, symbol: str) -> list[str]:

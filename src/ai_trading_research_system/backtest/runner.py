@@ -1,9 +1,11 @@
 """
 BacktestRunner: run NautilusTrader backtest with AISignalStrategy and yfinance history.
+Handles rate limiting: in-memory cache (reduce requests) + retry with backoff on 429.
 """
 from __future__ import annotations
 
 import shutil
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
@@ -11,6 +13,12 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 
 from ai_trading_research_system.strategy.translator import AISignal
+
+# Cache (symbol, start, end) -> (timestamp, df); TTL 5 min to reduce yfinance calls and avoid rate limit
+_YF_HISTORY_CACHE: dict[tuple[str, str, str], tuple[float, pd.DataFrame]] = {}
+_YF_CACHE_TTL_SEC = 300.0
+_YF_RATE_LIMIT_RETRY_WAIT_SEC = 65
+_YF_RATE_LIMIT_MAX_RETRIES = 2
 
 
 @dataclass
@@ -61,14 +69,40 @@ def _build_equity(symbol: str, venue: str):
 
 def _yfinance_history(symbol: str, start: str, end: str) -> pd.DataFrame:
     import yfinance as yf
+    from yfinance.exceptions import YFRateLimitError
+
+    cache_key = (symbol, start, end)
+    now = time.monotonic()
+    if cache_key in _YF_HISTORY_CACHE:
+        ts, cached_df = _YF_HISTORY_CACHE[cache_key]
+        if now - ts <= _YF_CACHE_TTL_SEC:
+            return cached_df.copy()
+        del _YF_HISTORY_CACHE[cache_key]
+
     ticker = yf.Ticker(symbol)
-    df = ticker.history(start=start, end=end, auto_adjust=True)
+    last_error: Exception | None = None
+    for attempt in range(_YF_RATE_LIMIT_MAX_RETRIES + 1):
+        try:
+            df = ticker.history(start=start, end=end, auto_adjust=True)
+            break
+        except YFRateLimitError as e:
+            last_error = e
+            if attempt < _YF_RATE_LIMIT_MAX_RETRIES:
+                time.sleep(_YF_RATE_LIMIT_RETRY_WAIT_SEC)
+            else:
+                raise
+    else:
+        if last_error is not None:
+            raise last_error
+        df = None
+
     if df is None or df.empty:
         return pd.DataFrame()
     df = df.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"})
     df = df[["open", "high", "low", "close", "volume"]]
     df.index = pd.to_datetime(df.index)
     df.index.name = "timestamp"
+    _YF_HISTORY_CACHE[cache_key] = (time.monotonic(), df.copy())
     return df
 
 

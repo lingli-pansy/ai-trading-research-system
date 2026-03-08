@@ -19,12 +19,8 @@ from ai_trading_research_system.autonomous.schemas import WeeklyTradingMandate, 
 from ai_trading_research_system.research.orchestrator import ResearchOrchestrator
 from ai_trading_research_system.strategy.translator import ContractTranslator
 from ai_trading_research_system.execution.nautilus_paper_runner import NautilusPaperRunner
-from ai_trading_research_system.services.benchmark_service import get_benchmark_return, compare_to_benchmark
-from ai_trading_research_system.services.report_service import (
-    generate_and_write as report_generate_and_write,
-    build_weekly_result_summary,
-)
 from ai_trading_research_system.services.experience_service import write_weekly_run
+from ai_trading_research_system.services.weekly_finish_service import finish_week
 
 
 @dataclass
@@ -127,54 +123,20 @@ def run_weekly_autonomous_paper(
         total_trades += day_trades
 
     sm.complete_week()
-    portfolio_return = total_pnl / capital if capital else 0.0
-    benchmark_return, benchmark_source = get_benchmark_return(
-        symbol=benchmark,
-        lookback_days=duration_days,
-    )
-    if use_mock:
-        benchmark_source = "mock"
-    bench_result = compare_to_benchmark(
-        portfolio_return=portfolio_return,
-        benchmark_return=benchmark_return,
-        max_drawdown=0.0,
-        trade_count=total_trades,
-        period=f"day_0_to_{duration_days}",
-        benchmark_source=benchmark_source,
-    )
     report_dir = report_dir or Path(".")
-    report_path = report_generate_and_write(
-        mandate,
-        bench_result,
-        key_trades=key_trades,
-        risk_events=[],
-        no_trade_days=sum(1 for _ in no_trade_reasons),
-        no_trade_reasons=no_trade_reasons[:5],
-        daily_research=daily_research,
-        report_dir=report_dir,
-    )
-    market_data_source = "mock" if use_mock else "yfinance"
-    summary = build_weekly_result_summary(
-        portfolio_return=portfolio_return,
-        benchmark_return=benchmark_return,
-        excess_return=bench_result.excess_return,
-        total_trades=total_trades,
-        total_pnl=total_pnl,
-        report_path=report_path,
-        daily_research_count=len(daily_research),
-        snapshot_source=snapshot.source,
-        market_data_source=market_data_source,
-        benchmark_source=benchmark_source,
-    )
-    return WeeklyPaperResult(
-        ok=True,
-        mandate_id=mandate.mandate_id,
-        status=sm.state,
-        capital_limit=capital,
+    return finish_week(
+        mandate=mandate,
+        capital=capital,
         benchmark=benchmark,
-        engine_type="nautilus",
-        used_nautilus=True,
-        report_path=report_path,
-        summary=summary,
-        strategy_run_ids=run_ids,
+        duration_days=duration_days,
+        total_pnl=total_pnl,
+        total_trades=total_trades,
+        run_ids=run_ids,
+        key_trades=key_trades,
+        no_trade_reasons=no_trade_reasons,
+        daily_research=daily_research,
+        snapshot_source=snapshot.source,
+        use_mock=use_mock,
+        state=sm.state,
+        report_dir=report_dir,
     )

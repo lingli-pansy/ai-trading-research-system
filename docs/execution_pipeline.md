@@ -26,8 +26,10 @@ flowchart LR
 
 ## 控制面主线
 
-- **入口**：CLI（`presentation/cli.py`）或 OpenClaw（`scripts/run_for_openclaw.py` → `openclaw.adapter`）。
-- **业务**：全部由 `application.commands` 执行；control/ 为兼容层，不再作为主入口。
+- **唯一入口**：业务仅由 `application.commands` 执行，经 `application.command_registry` 统一路由。
+- **CLI**：`presentation/cli.py` → 解析参数 → `command_registry.run` → `renderers.render`；不直接调用 pipeline。
+- **OpenClaw**：`run_for_openclaw.py` 使用 `openclaw.registry`（skill 列表）、`command_registry.run`、`openclaw.adapter.format_result`；不硬编码 skill，不直接调用 pipeline。
+- **control/**：已删除，不再作为入口。
 
 ## 现状概览
 
