@@ -17,9 +17,12 @@
 
 ## 2. OpenClaw 调哪个接口？
 
-- **脚本**：`python scripts/run_for_openclaw.py autonomous_paper_cycle [SYMBOL] --run_id <id> [--mock]`  
-- **编程**：`openclaw.adapter.run_autonomous_paper_cycle_report(...)` 或 `application.command_registry.run("autonomous_paper_cycle", ...)`  
-- 契约：`openclaw/contract.py` 中 `AutonomousPaperCycleInput` / `AutonomousPaperCycleOutput`  
+- **推荐（配置驱动）**：`openclaw.agent_adapter` + `OpenClawAgentConfig`  
+  - CLI：`openclaw-agent-once --config configs/openclaw_agent.paper.yaml` / `openclaw-agent-loop --config ...`  
+  - 编程：`run_openclaw_agent_once(config)` 或 `create_openclaw_agent(config)` 后 `run_loop(...)`  
+  - 详见 [openclaw-agent.md](openclaw-agent.md)。  
+- **兼容（技能式单次）**：`scripts/run_for_openclaw.py autonomous_paper_cycle [SYMBOL] ...`、`openclaw.adapter.run_autonomous_paper_cycle_report(...)`。  
+- 契约：`openclaw/contract.py` 中 `AutonomousPaperCycleInput` / `AutonomousPaperCycleOutput`。  
 
 ---
 
@@ -81,8 +84,8 @@
 
 ## 8. 哪些入口是兼容层，不建议新开发依赖？
 
-- **run_paper**（CLI `paper`）：已复用 autonomous_paper_cycle，保留 CLI 别名与 IBKR 分支；新逻辑应走 paper-cycle / autonomous_paper_cycle。  
-- **scripts/run_*.py**：与 CLI 对应，多为兼容入口；主路径为 `cli paper-cycle` 与 `run_for_openclaw.py autonomous_paper_cycle`。  
+- **run_paper**（CLI `paper`）：已复用 autonomous_paper_cycle，保留 CLI 别名与 IBKR 分支；新逻辑应走 paper-cycle / openclaw-agent-once。  
+- **scripts/run_*.py**：与 CLI 对应，多为兼容入口；**OpenClaw 主路径**为 `openclaw-agent-once` / `openclaw-agent-loop` + 配置文件。  
 - **pipeline/weekly_paper_pipe**：周自治专用，非单周期 agent 入口。  
 - **control/**：已删除；不再使用。  
 

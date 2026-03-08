@@ -205,7 +205,7 @@ def run_autonomous_paper_cycle_report(
     benchmark: str = "SPY",
     execute_paper: bool = True,
 ) -> dict[str, Any]:
-    """OpenClaw agent 主入口：触发单周期 autonomous paper，返回结构化 JSON。"""
+    """[Compat] 单周期 autonomous paper 返回 JSON。推荐：openclaw.agent_adapter.run_openclaw_agent_once(OpenClawAgentConfig.load(path))。"""
     result = registry_run(
         "autonomous_paper_cycle",
         run_id=run_id,

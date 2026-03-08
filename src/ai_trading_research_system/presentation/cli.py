@@ -108,6 +108,14 @@ def main() -> int:
     p_agent_loop.add_argument("--benchmark", default="SPY", help="Benchmark (default SPY)")
     _add_common(p_agent_loop)
 
+    p_openclaw_once = subparsers.add_parser("openclaw-agent-once", help="OpenClaw: one run via config (config -> adapter -> agent)")
+    p_openclaw_once.add_argument("--config", required=True, help="Path to OpenClaw agent config (yaml/json)")
+    p_openclaw_once.add_argument("--context", action="store_true", help="Include health/experience summary in output")
+
+    p_openclaw_loop = subparsers.add_parser("openclaw-agent-loop", help="OpenClaw: loop via config (config -> adapter -> agent)")
+    p_openclaw_loop.add_argument("--config", required=True, help="Path to OpenClaw agent config (yaml/json)")
+    p_openclaw_loop.add_argument("--context", action="store_true", help="Include health/experience summary each run")
+
     args = parser.parse_args()
 
     if args.command == "agent-run-once":
@@ -150,6 +158,63 @@ def main() -> int:
         agent.run_loop(
             interval_seconds=interval,
             max_consecutive_failures=max_failures,
+            on_run_done=on_run_done,
+        )
+        return 0
+
+    if args.command == "openclaw-agent-once":
+        from ai_trading_research_system.openclaw.config import OpenClawAgentConfig
+        from ai_trading_research_system.openclaw.agent_adapter import (
+            run_openclaw_agent_once,
+            format_openclaw_run_output,
+            build_openclaw_context_summary,
+        )
+        config = OpenClawAgentConfig.load(Path(args.config))
+        summary = run_openclaw_agent_once(config)
+        if getattr(args, "context", False):
+            summary["context_summary"] = build_openclaw_context_summary(runs_root=config.runs_root)
+        print(format_openclaw_run_output(summary, include_context=getattr(args, "context", False)))
+        return 0 if summary.get("ok", True) else 1
+
+    if args.command == "openclaw-agent-loop":
+        from ai_trading_research_system.openclaw.config import OpenClawAgentConfig
+        from ai_trading_research_system.openclaw.agent_adapter import (
+            create_openclaw_agent,
+            format_openclaw_run_output,
+            build_openclaw_context_summary,
+        )
+        from ai_trading_research_system.state.run_store import get_run_store
+        config = OpenClawAgentConfig.load(Path(args.config))
+        agent = create_openclaw_agent(config)
+        store = get_run_store(root=config.runs_root)
+        include_ctx = getattr(args, "context", False)
+
+        def on_run_done(summ, err):
+            if err:
+                print(f"RUN_ERROR: {err}")
+            elif summ:
+                run_path = str(store.run_dir(summ["run_id"])) if summ.get("run_id") else ""
+                out = {
+                    "agent_name": config.name,
+                    "run_id": summ.get("run_id"),
+                    "symbols": config.symbols,
+                    "ok": summ.get("ok"),
+                    "decision_summary": summ.get("decision_summary"),
+                    "risk_flags": summ.get("risk_flags"),
+                    "orders_executed": summ.get("orders_count"),
+                    "rebalance_summary": summ.get("rebalance_summary"),
+                    "portfolio_before": {"value": summ.get("portfolio_before_value")},
+                    "portfolio_after": {"value": summ.get("portfolio_after_value")},
+                    "run_path": run_path,
+                }
+                if include_ctx:
+                    out["context_summary"] = build_openclaw_context_summary(runs_root=config.runs_root)
+                print(format_openclaw_run_output(out, include_context=include_ctx))
+            print("---")
+
+        agent.run_loop(
+            interval_seconds=config.interval_seconds,
+            max_consecutive_failures=config.stop_after_consecutive_failures,
             on_run_done=on_run_done,
         )
         return 0
