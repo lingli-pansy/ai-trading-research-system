@@ -123,6 +123,23 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             decision_json TEXT NOT NULL,
             created_at TEXT DEFAULT (datetime('now'))
         );
+        CREATE TABLE IF NOT EXISTS experiment_cycles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            experiment_id TEXT NOT NULL,
+            mandate_id TEXT NOT NULL,
+            start_time TEXT NOT NULL,
+            end_time TEXT,
+            status TEXT NOT NULL,
+            last_rebalance TEXT,
+            last_health_check TEXT,
+            last_report_generated TEXT,
+            cycle_number INTEGER DEFAULT 0,
+            policy_version TEXT,
+            applied_policies TEXT,
+            evolution_decision TEXT,
+            final_performance TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
     """)
     # Migration: add policy_snapshot if missing (existing DBs)
     try:
@@ -189,6 +206,109 @@ def write_evolution_proposal_snapshot(
         )
         conn.commit()
         return cur.lastrowid or 0
+    finally:
+        conn.close()
+
+
+def write_experiment_cycle(
+    experiment_id: str,
+    mandate_id: str,
+    start_time: str,
+    *,
+    end_time: str = "",
+    status: str = "running",
+    last_rebalance: str = "",
+    last_health_check: str = "",
+    last_report_generated: str = "",
+    cycle_number: int = 0,
+    policy_version: str = "",
+    applied_policies: dict[str, Any] | None = None,
+    evolution_decision: dict[str, Any] | None = None,
+    final_performance: dict[str, Any] | None = None,
+    db_path: Path | None = None,
+) -> int:
+    """Insert one experiment_cycles row. Returns row id."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO experiment_cycles (experiment_id, mandate_id, start_time, end_time, status, last_rebalance, last_health_check, last_report_generated, cycle_number, policy_version, applied_policies, evolution_decision, final_performance)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                experiment_id,
+                mandate_id,
+                start_time,
+                end_time or None,
+                status,
+                last_rebalance or None,
+                last_health_check or None,
+                last_report_generated or None,
+                cycle_number,
+                policy_version or None,
+                json.dumps(applied_policies or {}, ensure_ascii=False),
+                json.dumps(evolution_decision or {}, ensure_ascii=False),
+                json.dumps(final_performance or {}, ensure_ascii=False),
+            ),
+        )
+        conn.commit()
+        return cur.lastrowid or 0
+    finally:
+        conn.close()
+
+
+def update_experiment_cycle(
+    experiment_id: str,
+    *,
+    cycle_number: int | None = None,
+    end_time: str = "",
+    status: str = "",
+    last_report_generated: str = "",
+    applied_policies: dict[str, Any] | None = None,
+    evolution_decision: dict[str, Any] | None = None,
+    final_performance: dict[str, Any] | None = None,
+    db_path: Path | None = None,
+) -> None:
+    """Update experiment_cycles row by experiment_id (and cycle_number if given)."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        updates = []
+        params = []
+        if end_time:
+            updates.append("end_time = ?")
+            params.append(end_time)
+        if status:
+            updates.append("status = ?")
+            params.append(status)
+        if last_report_generated:
+            updates.append("last_report_generated = ?")
+            params.append(last_report_generated)
+        if applied_policies is not None:
+            updates.append("applied_policies = ?")
+            params.append(json.dumps(applied_policies, ensure_ascii=False))
+        if evolution_decision is not None:
+            updates.append("evolution_decision = ?")
+            params.append(json.dumps(evolution_decision, ensure_ascii=False))
+        if final_performance is not None:
+            updates.append("final_performance = ?")
+            params.append(json.dumps(final_performance, ensure_ascii=False))
+        if not updates:
+            return
+        params.append(experiment_id)
+        if cycle_number is not None:
+            params.append(cycle_number)
+            cur.execute(
+                f"UPDATE experiment_cycles SET {', '.join(updates)} WHERE experiment_id = ? AND cycle_number = ?",
+                params,
+            )
+        else:
+            cur.execute(
+                f"UPDATE experiment_cycles SET {', '.join(updates)} WHERE experiment_id = ?",
+                params,
+            )
+        conn.commit()
     finally:
         conn.close()
 

@@ -43,6 +43,9 @@ class WeeklyReport:
     proposed_evolution: dict[str, Any] = field(default_factory=dict)   # EvolutionProposal 序列化
     approved_evolution: dict[str, Any] = field(default_factory=dict)    # 批准的 policy/strategy 调整
     rejected_evolution: list[dict[str, Any]] = field(default_factory=list)  # 被拒的调整项
+    experiment_id: str = ""
+    cycle_number: int = 0
+    policy_version: str = ""
 
 
 class WeeklyReportGenerator:
@@ -73,6 +76,9 @@ class WeeklyReportGenerator:
         proposed_evolution: dict[str, Any] | None = None,
         approved_evolution: dict[str, Any] | None = None,
         rejected_evolution: list[dict[str, Any]] | None = None,
+        experiment_id: str = "",
+        cycle_number: int = 0,
+        policy_version: str = "",
     ) -> WeeklyReport:
         key_trades = key_trades or []
         risk_events = risk_events or []
@@ -96,6 +102,9 @@ class WeeklyReportGenerator:
         proposed_evolution = proposed_evolution or {}
         approved_evolution = approved_evolution or {}
         rejected_evolution = rejected_evolution or []
+        experiment_id = experiment_id or ""
+        cycle_number = cycle_number or 0
+        policy_version = policy_version or ""
         if benchmark_result.excess_return > 0.02:
             suggestion = "组合跑赢基准，可维持当前风险偏好。"
         elif benchmark_result.trade_count == 0:
@@ -132,6 +141,9 @@ class WeeklyReportGenerator:
             proposed_evolution=proposed_evolution,
             approved_evolution=approved_evolution,
             rejected_evolution=rejected_evolution,
+            experiment_id=experiment_id,
+            cycle_number=cycle_number,
+            policy_version=policy_version,
         )
 
     def to_dict(self, report: WeeklyReport) -> dict[str, Any]:

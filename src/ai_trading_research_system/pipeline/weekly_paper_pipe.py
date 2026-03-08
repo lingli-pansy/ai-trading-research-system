@@ -4,7 +4,7 @@ UC-09 Weekly Autonomous Paper: 一周自治 paper 编排（controller only）。
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -46,10 +46,12 @@ class WeeklyPaperResult:
     report_path: str
     summary: dict[str, Any]
     strategy_run_ids: list[int]
+    evolution_decision: dict[str, Any] = field(default_factory=dict)
 
 
 def run_weekly_autonomous_paper(
     *,
+    mandate: Any = None,
     capital: float = 10_000.0,
     benchmark: str = "SPY",
     duration_days: int = 5,
@@ -58,18 +60,26 @@ def run_weekly_autonomous_paper(
     use_llm: bool = False,
     report_dir: Path | None = None,
     symbols: list[str] | None = None,
+    experiment_id: str = "",
+    cycle_number: int = 0,
+    policy_version: str = "",
 ) -> WeeklyPaperResult:
     """
     执行一周自治 paper：mandate → snapshot → 每日 research all → rank → allocator → execution。
-    symbols 为 watchlist；空则默认单 symbol。Experience 写入含 weekly_portfolio_experience。
+    mandate 可选；未传则 mandate_from_cli。symbols 为 watchlist；空则默认单 symbol。
     """
-    mandate = mandate_from_cli(
-        capital=capital,
-        benchmark=benchmark,
-        duration_days=duration_days,
-        auto_confirm=auto_confirm,
-        watchlist=symbols,
-    )
+    if mandate is None:
+        mandate = mandate_from_cli(
+            capital=capital,
+            benchmark=benchmark,
+            duration_days=duration_days,
+            auto_confirm=auto_confirm,
+            watchlist=symbols,
+        )
+    else:
+        capital = getattr(mandate, "capital_limit", capital) or capital
+        benchmark = getattr(mandate, "benchmark", benchmark) or benchmark
+        duration_days = getattr(mandate, "duration_trading_days", duration_days) or duration_days
     sm = AutonomousExecutionStateMachine()
     sm.start()
     snapshot = get_account_snapshot(paper=True, mock=use_mock, initial_cash=capital, allow_fallback=True)
@@ -294,4 +304,7 @@ def run_weekly_autonomous_paper(
         intraday_adjustments=intraday_adjustments_week,
         portfolio_health=portfolio_health,
         health_based_adjustments=health_based_adjustments_week,
+        experiment_id=experiment_id or "",
+        cycle_number=cycle_number or 0,
+        policy_version=policy_version or "",
     )

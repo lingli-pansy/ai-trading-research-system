@@ -38,6 +38,9 @@ def generate_and_write(
     proposed_evolution: dict[str, Any] | None = None,
     approved_evolution: dict[str, Any] | None = None,
     rejected_evolution: list[dict[str, Any]] | None = None,
+    experiment_id: str = "",
+    cycle_number: int = 0,
+    policy_version: str = "",
 ) -> str:
     """Generate weekly report and write to report_dir/weekly_report_{mandate_id}.json. Returns path."""
     if policy_used is None and getattr(mandate, "policy", None) is not None:
@@ -72,6 +75,9 @@ def generate_and_write(
         proposed_evolution=proposed_evolution or {},
         approved_evolution=approved_evolution or {},
         rejected_evolution=rejected_evolution or [],
+        experiment_id=experiment_id or "",
+        cycle_number=cycle_number or 0,
+        policy_version=policy_version or "",
     )
     report_dir = report_dir or Path(".")
     report_dir.mkdir(parents=True, exist_ok=True)

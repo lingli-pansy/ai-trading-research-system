@@ -59,6 +59,9 @@ def finish_week(
     intraday_adjustments: list[dict[str, Any]] | None = None,
     portfolio_health: dict[str, Any] | None = None,
     health_based_adjustments: list[dict[str, Any]] | None = None,
+    experiment_id: str = "",
+    cycle_number: int = 0,
+    policy_version: str = "",
 ) -> Any:
     """
     After execution loop: compute benchmark, write report, build summary, return WeeklyPaperResult.
@@ -127,6 +130,9 @@ def finish_week(
         proposed_evolution=proposed_evolution,
         approved_evolution=approved_evolution,
         rejected_evolution=rejected_evolution,
+        experiment_id=experiment_id or "",
+        cycle_number=cycle_number or 0,
+        policy_version=policy_version or "",
     )
     if portfolio_health:
         write_portfolio_health_snapshot(mandate_id=mandate.mandate_id, period=period, snapshot=portfolio_health)
@@ -187,4 +193,5 @@ def finish_week(
         report_path=report_path,
         summary=summary,
         strategy_run_ids=run_ids,
+        evolution_decision=approved_evolution,
     )
