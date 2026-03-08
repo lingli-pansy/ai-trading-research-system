@@ -13,6 +13,7 @@ OPENCLAW_COMMANDS = [
     "research_symbol",
     "backtest_symbol",
     "run_demo",
+    "autonomous_paper_cycle",
     "weekly_autonomous_paper",
     "weekly_report",
 ]
@@ -60,6 +61,20 @@ class RunPaperInput(CommandInputBase):
     command: str = "run_paper"
     symbol: str = "NVDA"
     once: bool = False
+
+
+class AutonomousPaperCycleInput(CommandInputBase):
+    """OpenClaw agent 单周期输入：唯一调用入口的契约。"""
+    command: str = "autonomous_paper_cycle"
+    run_id: str = ""
+    symbol_universe: list[str] | None = None  # 空则默认 ["NVDA"]
+    mode: str = "paper"
+    use_mock: bool = False
+    use_llm: bool = False
+    time_window: str | None = None
+    capital: float = 10_000.0
+    benchmark: str = "SPY"
+    execute_paper: bool = True
 
 
 # --- Output schemas: success ---
@@ -129,6 +144,21 @@ class RunPaperOutput(OpenClawSuccessBase):
     contract_confidence: str = ""
     signal_action: str = ""
     message: str = ""
+
+
+class AutonomousPaperCycleOutput(OpenClawSuccessBase):
+    """OpenClaw agent 单周期输出：候选/最终决策、订单意图、拒绝原因、落盘位置。"""
+    command: str = "autonomous_paper_cycle"
+    run_id: str = ""
+    ok: bool = True
+    candidate_decision: list[dict[str, Any]] = Field(default_factory=list)
+    final_decision: dict[str, Any] = Field(default_factory=dict)
+    order_intents: list[dict[str, Any]] = Field(default_factory=list)
+    no_trade_reason: str = ""
+    rejected_reason: str = ""
+    skipped_reason: str = ""
+    write_paths: dict[str, str] = Field(default_factory=dict)
+    error: str = ""
 
 
 # --- Error schema (stderr / failure) ---

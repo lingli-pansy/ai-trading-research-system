@@ -27,7 +27,8 @@ def main() -> int:
     parser.add_argument("--capital", type=float, default=10000, help="Weekly: capital limit (default 10000)")
     parser.add_argument("--benchmark", default="SPY", help="Weekly: benchmark symbol (default SPY)")
     parser.add_argument("--days", type=int, default=5, help="Weekly: trading days (default 5)")
-    parser.add_argument("--symbols", default=None, help="Weekly: comma-separated watchlist (e.g. NVDA,AAPL)")
+    parser.add_argument("--symbols", default=None, help="Weekly or paper_cycle: comma-separated watchlist (e.g. NVDA,AAPL)")
+    parser.add_argument("--run_id", default=None, help="autonomous_paper_cycle: run id (default: auto-generated)")
     parser.add_argument("--mock", action="store_true", help="Use mock research data")
     parser.add_argument("--llm", action="store_true", help="Use LLM agent (requires OPENAI_API_KEY)")
     args = parser.parse_args()
@@ -36,8 +37,8 @@ def main() -> int:
         kwargs = kwargs_for_task(args.task, args)
         result = command_run(args.task, **kwargs)
         out = format_result(args.task, result, **kwargs)
-        if args.task in ("research_symbol", "backtest_symbol", "run_demo"):
-            out["ok"] = True
+        if args.task in ("research_symbol", "backtest_symbol", "run_demo", "autonomous_paper_cycle"):
+            out["ok"] = out.get("ok", True)
             out["command"] = args.task
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return 0

@@ -131,6 +131,24 @@ def format_result(task: str, result: Any, *, command_override: str | None = None
             "benchmark_source": summary.get("benchmark_source", ""),
         }
         return out
+    if task == "autonomous_paper_cycle":
+        # CycleOutput: ok, run_id, candidate_decision, final_decision, order_intents, no_trade_reason, ...
+        return {
+            "ok": result.ok,
+            "command": command_override or task,
+            "run_id": result.run_id,
+            "candidate_decision": result.candidate_decision,
+            "final_decision": result.final_decision,
+            "order_intents": result.order_intents,
+            "no_trade_reason": result.no_trade_reason,
+            "rejected_reason": result.rejected_reason,
+            "skipped_reason": result.skipped_reason,
+            "write_paths": result.write_paths,
+            "error": result.error,
+            "status": "ok" if result.ok else "error",
+            "engine_type": "nautilus",
+            "used_nautilus": True,
+        }
     raise ValueError(f"unknown task for format_result: {task}")
 
 
@@ -174,6 +192,30 @@ def run_demo_report(
     """Run demo via command_registry; return report dict."""
     result = registry_run("run_demo", symbol=symbol, use_mock=use_mock, use_llm=use_llm)
     return format_result("run_demo", result, symbol=symbol)
+
+
+def run_autonomous_paper_cycle_report(
+    *,
+    run_id: str = "",
+    symbol_universe: list[str] | None = None,
+    use_mock: bool = False,
+    use_llm: bool = False,
+    capital: float = 10_000.0,
+    benchmark: str = "SPY",
+    execute_paper: bool = True,
+) -> dict[str, Any]:
+    """OpenClaw agent 主入口：触发单周期 autonomous paper，返回结构化 JSON。"""
+    result = registry_run(
+        "autonomous_paper_cycle",
+        run_id=run_id,
+        symbol_universe=symbol_universe or ["NVDA"],
+        use_mock=use_mock,
+        use_llm=use_llm,
+        capital=capital,
+        benchmark=benchmark,
+        execute_paper=execute_paper,
+    )
+    return format_result("autonomous_paper_cycle", result)
 
 
 def run_weekly_paper_report(

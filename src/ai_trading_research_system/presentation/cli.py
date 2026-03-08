@@ -67,6 +67,15 @@ def main() -> int:
     p_paper.add_argument("--once", action="store_true", help="Run one Research+inject cycle then exit")
     _add_common(p_paper)
 
+    p_paper_cycle = subparsers.add_parser("paper-cycle", help="OpenClaw agent: single autonomous paper cycle (state in runs/)")
+    p_paper_cycle.add_argument("--run_id", default="", help="Run id (default: auto-generated)")
+    p_paper_cycle.add_argument("--symbols", default=None, help="Comma-separated symbols (default: NVDA)")
+    p_paper_cycle.add_argument("--capital", type=float, default=10000, help="Capital (default 10000)")
+    p_paper_cycle.add_argument("--benchmark", default="SPY", help="Benchmark (default SPY)")
+    p_paper_cycle.add_argument("--no-execute", action="store_false", dest="execute_paper", help="Do not execute paper, only output intents (default: execute)")
+    p_paper_cycle.set_defaults(execute_paper=True)
+    _add_common(p_paper_cycle)
+
     p_demo = subparsers.add_parser("demo", help="E2E demo: research → strategy → backtest → summary (four blocks)")
     p_demo.add_argument("symbol", nargs="?", default="NVDA", help="Symbol (default: NVDA)")
     _add_common(p_demo)

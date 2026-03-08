@@ -1,7 +1,10 @@
-"""Command: run paper (research → contract → paper inject). Calls paper_pipe; handles kill switch and IBKR vs Nautilus."""
+"""Command: run paper (research → contract → paper inject).
+主路径：非 IBKR 时复用 run_autonomous_paper_cycle，状态与审计落盘。IBKR 路径为兼容层，仍走 paper_pipe + place_market_buy。
+"""
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -53,8 +56,7 @@ def run_paper(
 
     use_ibkr = bool((os.environ.get("IBKR_HOST") or "").strip() and (os.environ.get("IBKR_PORT") or "").strip())
 
-    from ai_trading_research_system.pipeline.paper_pipe import run, run_and_inject
-    from ai_trading_research_system.execution.paper_runner import PaperRunner
+    from ai_trading_research_system.pipeline.paper_pipe import run
 
     if use_ibkr:
         res = run(symbol, use_mock=use_mock, use_llm=use_llm)
@@ -89,29 +91,29 @@ def run_paper(
             out.message = str(e)
         return out
 
-    def _float_env(name: str, default: float | None) -> float | None:
-        raw = os.environ.get(name)
-        if not raw:
-            return default
-        try:
-            return float(raw.strip())
-        except ValueError:
-            return default
-
-    max_pct = _float_env("PAPER_MAX_POSITION_PCT", None)
-    daily_stop = _float_env("PAPER_DAILY_STOP_LOSS_PCT", None)
-    runner = PaperRunner(symbol, max_position_pct=max_pct, daily_stop_loss_pct=daily_stop)
-    result = run_and_inject(symbol, runner, price, use_mock=use_mock, use_llm=use_llm)
-    r = result.runner_result
+    # 主路径：复用 autonomous_paper_cycle，状态与审计落盘（runs/<run_id>/）
+    from ai_trading_research_system.application.commands.run_autonomous_paper_cycle import run_autonomous_paper_cycle
+    run_id = f"paper_{symbol}_{int(time.time())}"
+    cycle_out = run_autonomous_paper_cycle(
+        run_id=run_id,
+        symbol_universe=[symbol],
+        use_mock=use_mock,
+        use_llm=use_llm,
+        execute_paper=True,
+    )
+    # 从 cycle 输出转成 PaperCommandResult（单 symbol 时取第一个）
+    r = None
+    if cycle_out.paper_execution_results:
+        r = cycle_out.paper_execution_results[0]
     return PaperCommandResult(
         symbol=symbol,
-        contract_action=result.contract.suggested_action,
-        contract_confidence=result.contract.confidence,
-        signal_action=result.signal.action,
-        allowed_position_size=result.signal.allowed_position_size,
+        contract_action=cycle_out.candidate_decision[0].get("action", "") if cycle_out.candidate_decision else "",
+        contract_confidence=cycle_out.candidate_decision[0].get("confidence", "") if cycle_out.candidate_decision else "",
+        signal_action="paper_buy" if (cycle_out.order_intents and not cycle_out.no_trade_reason) else "no_trade",
+        allowed_position_size=cycle_out.order_intents[0].get("size_fraction", 0) if cycle_out.order_intents else 0,
         price=price,
-        order_done=r.order_done if r else None,
-        message=r.message if r else "",
-        order_result=r.order_result if r else None,
+        order_done=r.get("order_done", None) if r else None,
+        message=r.get("message", cycle_out.no_trade_reason or "") if r else (cycle_out.no_trade_reason or ""),
+        order_result=r,
         use_ibkr=False,
     )

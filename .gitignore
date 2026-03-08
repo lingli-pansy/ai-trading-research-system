@@ -18,6 +18,7 @@ catalog/
 .nautilus/
 .reports/
 reports/
+runs/
 .experience/
 .backtest_catalog/
 .paper_stop

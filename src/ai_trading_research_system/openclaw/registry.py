@@ -15,12 +15,14 @@ from ai_trading_research_system.openclaw.contract import (
     RunPaperInput,
     WeeklyAutonomousPaperInput,
     WeeklyReportInput,
+    AutonomousPaperCycleInput,
     ResearchSymbolOutput,
     BacktestSymbolOutput,
     RunDemoOutput,
     RunPaperOutput,
     WeeklyAutonomousPaperOutput,
     WeeklyReportOutput,
+    AutonomousPaperCycleOutput,
 )
 
 # Full metadata per command. handler_target = application.commands function name.
@@ -61,13 +63,24 @@ _COMMAND_METADATA: list[dict[str, Any]] = [
     {
         "canonical": "run_paper",
         "aliases": ["paper"],
-        "description": "Research → Contract → Paper inject (once or runner)",
+        "description": "Research → Contract → Paper inject (once or runner). Deprecated for agent: use autonomous_paper_cycle.",
         "input_schema": RunPaperInput.model_json_schema(),
         "output_schema": RunPaperOutput.model_json_schema(),
         "example": {"command": "run_paper", "symbol": "NVDA", "once": False},
         "handler_target": "run_paper",
         "needs_report_dir": False,
         "expose_for_openclaw": False,
+    },
+    {
+        "canonical": "autonomous_paper_cycle",
+        "aliases": ["paper_cycle", "paper-cycle"],
+        "description": "OpenClaw agent 主入口：单周期 autonomous paper（读组合→研究→规则/风控→决策→订单意图/执行→落盘）",
+        "input_schema": AutonomousPaperCycleInput.model_json_schema(),
+        "output_schema": AutonomousPaperCycleOutput.model_json_schema(),
+        "example": {"command": "autonomous_paper_cycle", "run_id": "run_001", "symbol_universe": ["NVDA"], "use_mock": True},
+        "handler_target": "run_autonomous_paper_cycle",
+        "needs_report_dir": False,
+        "expose_for_openclaw": True,
     },
     {
         "canonical": "weekly_autonomous_paper",
@@ -182,6 +195,21 @@ def kwargs_for_task(task: str, args: Any) -> dict[str, Any]:
             "symbol": getattr(args, "symbol", "NVDA"),
             "once": getattr(args, "once", False),
             "project_root": Path.cwd(),
+        }
+    if task == "autonomous_paper_cycle":
+        syms = getattr(args, "symbol_universe", None) or getattr(args, "symbols", None)
+        if isinstance(syms, str):
+            syms = [s.strip() for s in syms.split(",") if s.strip()]
+        if not syms:
+            syms = ["NVDA"]
+        return {
+            **base,
+            "run_id": getattr(args, "run_id", "") or "",
+            "symbol_universe": syms,
+            "mode": getattr(args, "mode", "paper"),
+            "capital": getattr(args, "capital", 10000),
+            "benchmark": getattr(args, "benchmark", "SPY"),
+            "execute_paper": getattr(args, "execute_paper", True),
         }
     if task == "weekly_autonomous_paper":
         syms = getattr(args, "symbols", None)

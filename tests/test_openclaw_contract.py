@@ -30,9 +30,10 @@ def test_openclaw_commands_list():
     assert "research_symbol" in OPENCLAW_COMMANDS
     assert "backtest_symbol" in OPENCLAW_COMMANDS
     assert "run_demo" in OPENCLAW_COMMANDS
+    assert "autonomous_paper_cycle" in OPENCLAW_COMMANDS
     assert "weekly_autonomous_paper" in OPENCLAW_COMMANDS
     assert "weekly_report" in OPENCLAW_COMMANDS
-    assert len(OPENCLAW_COMMANDS) == 5
+    assert len(OPENCLAW_COMMANDS) == 6
 
 
 def test_openclaw_commands_match_registry():

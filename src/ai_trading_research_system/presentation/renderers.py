@@ -32,6 +32,19 @@ def render(command: str, result: Any, args: Any) -> RenderOutput:
             "report_path": result.report_path,
             "summary": result.summary,
         }
+    if command == "paper-cycle":
+        return {
+            "ok": result.ok,
+            "run_id": result.run_id,
+            "candidate_decision": result.candidate_decision,
+            "final_decision": result.final_decision,
+            "order_intents": result.order_intents,
+            "no_trade_reason": result.no_trade_reason,
+            "rejected_reason": result.rejected_reason,
+            "skipped_reason": result.skipped_reason,
+            "write_paths": result.write_paths,
+            "error": result.error,
+        }
     if command == "weekly_report":
         return {
             "ok": result.ok,

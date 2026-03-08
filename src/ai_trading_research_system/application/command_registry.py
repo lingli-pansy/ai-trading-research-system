@@ -21,16 +21,19 @@ from ai_trading_research_system.application.commands import (
     run_backtest_symbol,
     run_demo,
     run_paper,
+    run_autonomous_paper_cycle,
     run_weekly_autonomous_paper,
     run_weekly_report,
 )
 
 # Handler target name -> callable (only binding; command list lives in registry)
+# autonomous_paper_cycle = OpenClaw agent 主入口
 _HANDLERS: dict[str, Callable[..., Any]] = {
     "run_research_symbol": run_research_symbol,
     "run_backtest_symbol": run_backtest_symbol,
     "run_demo": run_demo,
     "run_paper": run_paper,
+    "run_autonomous_paper_cycle": run_autonomous_paper_cycle,
     "run_weekly_autonomous_paper": run_weekly_autonomous_paper,
     "run_weekly_report": run_weekly_report,
 }
