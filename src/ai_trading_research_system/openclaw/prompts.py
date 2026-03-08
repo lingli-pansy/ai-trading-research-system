@@ -33,7 +33,7 @@ def build_approver_user_message(prompt_input: dict) -> str:
     lines.append("")
     lines.append("APPROVAL_FOCUS")
     for a in prompt_input.get("approval_focus") or []:
-        lines.append(f"  {a.get('symbol', '')} score={a.get('score')} {a.get('allocator')} {a.get('one_line_reason', '')}")
+        lines.append(f"  {a.get('symbol', '')} {a.get('one_line_reason', '')}")
     if not prompt_input.get("approval_focus"):
         lines.append("  (none)")
     lines.append("")

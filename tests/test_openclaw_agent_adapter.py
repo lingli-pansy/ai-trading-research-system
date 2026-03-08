@@ -14,6 +14,7 @@ from ai_trading_research_system.openclaw.agent_adapter import (
     build_approver_prompt_input,
     parse_approval_decision,
 )
+from ai_trading_research_system.openclaw.prompts import build_approver_user_message
 
 
 def test_parse_approval_decision() -> None:
@@ -67,6 +68,29 @@ def test_approver_integration_smoke_prompt_input_to_normalized_decision() -> Non
     for raw, exp in zip(raw_outputs, expected):
         normalized = parse_approval_decision(raw)
         assert normalized == exp, f"raw={raw!r} -> {normalized}, expected {exp}"
+
+
+def test_approver_smoke_full_chain_no_external_services() -> None:
+    """
+    联调 smoke：固定 agent_context/recommendation -> prompt input -> user message
+    -> parse_approval_decision -> normalized。不依赖外部服务，验证联调链路稳定。
+    """
+    minimal_agent_context = {
+        "portfolio_summary": {"equity": 100000, "cash": 5000, "positions": {"SPY": 0.5}},
+        "risk_flags": [],
+        "proposal_summary": ["NVDA ADD 0.05"],
+        "approval_focus": [{"symbol": "NVDA", "score": 0.88, "allocator": "probe", "one_line_reason": "score high"}],
+        "recommendation": "approve",
+        "recommendation_reasons": ["no risk flags"],
+    }
+    prompt_input = build_approver_prompt_input(minimal_agent_context)
+    user_message = build_approver_user_message(prompt_input)
+    assert "RECOMMENDATION" in user_message
+    assert "PORTFOLIO_SUMMARY" in user_message
+    assert "approve" in user_message
+    raw = "I recommend approving this trade"
+    normalized = parse_approval_decision(raw)
+    assert normalized == "approve"
 
 
 def test_config_from_dict_defaults() -> None:

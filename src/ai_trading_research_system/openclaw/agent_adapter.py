@@ -17,6 +17,7 @@ from ai_trading_research_system.openclaw.config import OpenClawAgentConfig
 from ai_trading_research_system.runtime.proposal import Proposal, ApprovalDecision
 from ai_trading_research_system.state.experience_store import ExperienceStore, get_experience_store
 from ai_trading_research_system.state.run_store import RunStore, get_run_store
+from ai_trading_research_system.openclaw.prompts import build_approver_user_message
 
 
 def build_approver_prompt_input(agent_context: dict[str, Any] | None) -> dict[str, Any]:
@@ -165,6 +166,90 @@ def run_openclaw_agent_once(config: OpenClawAgentConfig) -> dict[str, Any]:
         "recommendation": (agent_context or {}).get("recommendation") or "defer",
         "recommendation_reasons": (agent_context or {}).get("recommendation_reasons") or [],
     }
+
+
+def write_approver_prompt_artifacts(
+    store: RunStore,
+    run_id: str,
+    prompt_input: dict[str, Any],
+    user_message_text: str,
+) -> dict[str, str]:
+    """
+    将联调用 prompt 输入与 user message 写入 runs/<run_id>/artifacts/，
+    返回路径供 summary 展示。不修改 pipeline。
+    """
+    store.create_run(run_id)
+    store.write_artifact(run_id, "approver_prompt_input", prompt_input)
+    path_txt = store.run_dir(run_id) / "artifacts" / "approver_user_message.txt"
+    path_txt.write_text(user_message_text, encoding="utf-8")
+    return {
+        "prompt_input_path": store.path_for_artifact(run_id, "approver_prompt_input"),
+        "user_message_path": str(path_txt),
+    }
+
+
+def run_openclaw_approver_smoke(
+    config: OpenClawAgentConfig,
+    *,
+    raw_agent_output: str | None = None,
+) -> dict[str, Any]:
+    """
+    单轮联调脚手架：运行一次 proposal/recommendation 生成 → 构造 prompt input/user message
+    → 写入 approver_prompt_input.json、approver_user_message.txt → 模拟/接入 approver 输出
+    → parser → normalized decision，返回完整联调 summary。可不接真实 OpenClaw，用默认 mock 输出。
+    """
+    summary = run_openclaw_agent_once(config)
+    run_id = summary.get("run_id", "")
+    store = get_run_store(root=config.runs_root)
+    agent_context = load_agent_context(run_id, config.runs_root)
+    prompt_input = build_approver_prompt_input(agent_context)
+    user_message_text = build_approver_user_message(prompt_input)
+    paths = write_approver_prompt_artifacts(store, run_id, prompt_input, user_message_text)
+    raw = raw_agent_output if raw_agent_output is not None else "approve"
+    parsed = parse_approval_decision(raw)
+    normalized = parsed
+    return {
+        "run_id": run_id,
+        "proposal": summary.get("rebalance_summary") or [],
+        "approval_focus": (agent_context or {}).get("approval_focus") or [],
+        "recommendation": (agent_context or {}).get("recommendation") or "defer",
+        "recommendation_reasons": (agent_context or {}).get("recommendation_reasons") or [],
+        "prompt_input_path": paths["prompt_input_path"],
+        "user_message_path": paths["user_message_path"],
+        "raw_agent_output": raw,
+        "parsed_decision": parsed,
+        "normalized_decision": normalized,
+        "ok": summary.get("ok", False),
+    }
+
+
+def format_approver_smoke_summary(smoke_result: dict[str, Any]) -> str:
+    """联调 summary：一眼看出 agent 看到什么、回了什么、系统如何解释。"""
+    proposal_lines = [str(x) for x in (smoke_result.get("proposal") or [])]
+    focus_lines = [f"  {a.get('symbol', '')} score={a.get('score')} {a.get('allocator')}" for a in (smoke_result.get("approval_focus") or [])]
+    reason_lines = [f"  - {r}" for r in (smoke_result.get("recommendation_reasons") or [])]
+    lines = [
+        "RUN_ID",
+        smoke_result.get("run_id", ""),
+        "PROPOSAL",
+        *(proposal_lines if proposal_lines else ["(no proposal)"]),
+        "APPROVAL_FOCUS",
+        *(focus_lines if focus_lines else ["(none)"]),
+        "RECOMMENDATION",
+        smoke_result.get("recommendation", "defer"),
+        *(reason_lines if reason_lines else ["(none)"]),
+        "PROMPT_INPUT_PATH",
+        smoke_result.get("prompt_input_path", ""),
+        "USER_MESSAGE_PATH",
+        smoke_result.get("user_message_path", ""),
+        "RAW_AGENT_OUTPUT",
+        smoke_result.get("raw_agent_output", ""),
+        "PARSED_DECISION",
+        smoke_result.get("parsed_decision", ""),
+        "NORMALIZED_DECISION",
+        smoke_result.get("normalized_decision", ""),
+    ]
+    return "\n".join(lines)
 
 
 def build_openclaw_context_summary(

@@ -116,6 +116,10 @@ def main() -> int:
     p_openclaw_loop.add_argument("--config", required=True, help="Path to OpenClaw agent config (yaml/json)")
     p_openclaw_loop.add_argument("--context", action="store_true", help="Include health/experience summary each run")
 
+    p_openclaw_smoke = subparsers.add_parser("openclaw-approver-smoke", help="OpenClaw: single-round approver integration (proposal -> prompt -> mock output -> parsed decision)")
+    p_openclaw_smoke.add_argument("--config", required=True, help="Path to OpenClaw agent config (yaml/json)")
+    p_openclaw_smoke.add_argument("--raw", default=None, help="Mock raw agent output (default: approve)")
+
     p_proposal_run = subparsers.add_parser("proposal-run", help="Generate proposal only (no approval, no execution)")
     p_proposal_run.add_argument("--symbols", default="NVDA", help="Comma-separated symbols (default: NVDA)")
     p_proposal_run.add_argument("--capital", type=float, default=10000, help="Capital (default 10000)")
@@ -209,6 +213,17 @@ def main() -> int:
             summary["context_summary"] = build_openclaw_context_summary(runs_root=config.runs_root)
         print(format_openclaw_run_output(summary, include_context=getattr(args, "context", False)))
         return 0 if summary.get("ok", True) else 1
+
+    if args.command == "openclaw-approver-smoke":
+        from ai_trading_research_system.openclaw.config import OpenClawAgentConfig
+        from ai_trading_research_system.openclaw.agent_adapter import (
+            run_openclaw_approver_smoke,
+            format_approver_smoke_summary,
+        )
+        config = OpenClawAgentConfig.load(Path(args.config))
+        result = run_openclaw_approver_smoke(config, raw_agent_output=getattr(args, "raw", None))
+        print(format_approver_smoke_summary(result))
+        return 0 if result.get("ok", True) else 1
 
     if args.command == "openclaw-agent-loop":
         from ai_trading_research_system.openclaw.config import OpenClawAgentConfig
