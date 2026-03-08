@@ -70,3 +70,48 @@ def test_run_store_read_run_summary(tmp_path: Path) -> None:
     assert summary["run_id"] == run_id
     assert summary["final_decision"]["no_trade_reason"] == "no_trigger"
     assert "portfolio_before" in summary
+
+
+def test_run_store_replay_run(tmp_path: Path) -> None:
+    store = RunStore(root=tmp_path)
+    run_id = "replay_1"
+    store.create_run(run_id, symbols=["NVDA", "AAPL"])
+    store.write_snapshot(run_id, "portfolio_before", {"equity": 10000, "positions": []})
+    store.write_snapshot(run_id, "research", {"by_symbol": [{"symbol": "NVDA", "confidence": "medium"}]})
+    store.write_artifact(run_id, "rebalance_plan", {"items": [{"symbol": "NVDA", "action_type": "OPEN"}], "no_trade_reason": ""})
+    replay = store.replay_run(run_id)
+    assert replay is not None
+    assert replay["run_id"] == run_id
+    assert replay["symbols"] == ["NVDA", "AAPL"]
+    assert replay["rebalance_plan"] is not None
+
+
+def test_run_store_get_latest_run_summary(tmp_path: Path) -> None:
+    store = RunStore(root=tmp_path)
+    store.create_run("r1", symbols=["A"])
+    store.write_artifact("r1", "final_decision", {"order_intents": [{"symbol": "A"}]})
+    store.write_snapshot("r1", "portfolio_after", {"equity": 10000})
+    summary = store.get_latest_run_summary()
+    assert summary is not None
+    assert summary["run_id"] == "r1"
+    assert "final_decision" in summary
+    assert "portfolio_after" in summary
+
+
+def test_run_store_get_latest_portfolio_state(tmp_path: Path) -> None:
+    store = RunStore(root=tmp_path)
+    store.create_run("p1", symbols=["X"])
+    store.write_snapshot("p1", "portfolio_after", {"equity": 5000, "positions": [], "source": "derived"})
+    state = store.get_latest_portfolio_state()
+    assert state is not None
+    assert state.get("equity") == 5000
+
+
+def test_run_store_get_previous_research_snapshot(tmp_path: Path) -> None:
+    store = RunStore(root=tmp_path)
+    store.create_run("res1", symbols=["NVDA"])
+    store.write_snapshot("res1", "research", {"by_symbol": [{"symbol": "NVDA", "thesis": "test"}]})
+    prev = store.get_previous_research_snapshot("NVDA")
+    assert prev is not None
+    assert prev.get("symbol") == "NVDA"
+    assert prev.get("thesis") == "test"

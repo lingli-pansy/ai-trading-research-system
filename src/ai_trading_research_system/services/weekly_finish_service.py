@@ -101,7 +101,7 @@ def finish_week(
         period=f"day_0_to_{duration_days}",
         benchmark_source=benchmark_source,
     )
-    report_dir = report_dir or Path(".")
+    report_dir = report_dir or Path.cwd() / "reports"
     policy_summary = policy_summary or {}
     # Experience-driven insights（基于历史周数据，不含本周）
     insights = analyze_experience_from_store(mandate_id=mandate.mandate_id, limit_weeks=30)
@@ -125,7 +125,7 @@ def finish_week(
     period = f"day_0_to_{duration_days}"
     write_evolution_proposal_snapshot(mandate_id=mandate.mandate_id, period=period, proposal=proposed_evolution)
     write_evolution_decision_snapshot(mandate_id=mandate.mandate_id, period=period, decision=approved_evolution)
-    last_report_path = str((report_dir or Path(".")) / f"weekly_report_{mandate.mandate_id}.json")
+    last_report_path = str((report_dir or Path.cwd() / "reports") / f"weekly_report_{mandate.mandate_id}.json")
     policy_obj = getattr(mandate, "policy", None) or default_policy()
     system_snapshot_at_week_end = {
         "experiment_id": experiment_id or "",

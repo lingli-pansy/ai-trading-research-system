@@ -407,7 +407,7 @@ def run_weekly_autonomous_paper(
     
         _progress("Computing benchmark & writing report...")
         sm.complete_week()
-        report_dir = report_dir or Path(".")
+        report_dir = report_dir or Path.cwd() / "reports"
         turnover_pct = min(100.0, 10.0 * total_trades) if total_trades else 0.0
         lookback_week = max(duration_days, 2)
         if not use_mock:

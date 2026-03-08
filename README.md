@@ -1,25 +1,23 @@
 # AI Trading Research System
 
-AI Trading Research System 是一个面向个人交易者的 **AI 研究与决策增强系统**。
+面向个人交易者的 **AI 研究与决策增强系统**：多智能体研究输出 `DecisionContract`，由规则/风控/组合引擎落地，**先打通 research → signal → paper trading 闭环**，支持 **OpenClaw** 作为自动运行入口。
 
-系统目标不是让 LLM 直接接管交易，而是：
+**→ 当前该跑什么、结果在哪、replay 看哪**：见 **[docs/current-path.md](docs/current-path.md)**（优先阅读）。
 
-- 用多智能体研究系统处理不确定信息
-- 输出结构化的 `DecisionContract`
-- 由规则系统做信号过滤与风险控制
-- 支持 OpenClaw 作为自动运行与交互入口
-- 先打通 research → signal → paper trading 的完整闭环
+---
 
-## 项目状态
+## 当前目标与主路径
 
-当前仓库 **MVP 已达成**；**Phase 2（Interactive Research System）** 已达成：统一 CLI（`cli.py`）、E2E demo、OpenClaw/CLI 与 `application.commands` 打通（control 为兼容层，退场中）。**文档入口**：[docs/README.md](docs/README.md)。**当前状态**：[docs/operations.md](docs/operations.md)。**实盘前工作**见 [docs/archive/live_readiness_checklist.md](docs/archive/live_readiness_checklist.md)；IBKR/OpenClaw/生产密钥见 [docs/archive/deferred_authorization.md](docs/archive/deferred_authorization.md)。后续按 [docs/archive/restructuring_plan.md](docs/archive/restructuring_plan.md) 演进：
+- **Canonical path**：`autonomous_paper_cycle`（单周期：读组合 → 研究 → 规则/风控 → RebalancePlan → 订单意图/执行 → 落盘）。
+- **OpenClaw 接入**：调用 `autonomous_paper_cycle`（脚本：`scripts/run_for_openclaw.py autonomous_paper_cycle ...`；编程：`openclaw.adapter.run_autonomous_paper_cycle_report`）。
+- **Paper trading 推荐命令**：`python -m ai_trading_research_system.presentation.cli paper-cycle --symbols NVDA [--mock]`。
+- **状态与 artifact 存放**：**runs/** 下 `runs/<run_id>/`（snapshots、artifacts、execution、audit）；统一经 **state.RunStore** 读写。
 
-- **NautilusTrader**：统一回测与实盘引擎，保证 backtest-live parity
-- **TradingAgents（Fork）**：主动研究、多 Agent 协作，输出 DecisionContract
-- **经验闭环**：回测/实盘结果写入 Experience Store，下一轮研究注入历史经验，持续迭代决策信号
-- **多市场**：先美股（yfinance + IBKR），架构预留 A 股/加密货币扩展
+详见 [docs/current-path.md](docs/current-path.md)、[docs/system_architecture.md](docs/system_architecture.md)、[docs/operations.md](docs/operations.md)。
 
-详见 [docs/README.md](docs/README.md) 与 [docs/archive/restructuring_plan.md](docs/archive/restructuring_plan.md)。
+## 项目状态（历史阶段说明已下沉至 archive）
+
+MVP / Phase 2 已达成；当前以 **autonomous paper trading 收敛 + OpenClaw agent 稳定入口** 为主。历史规划与清单见 [docs/archive/](docs/archive/)。
 
 ## 核心架构（当前 MVP）
 
@@ -83,10 +81,11 @@ python cli.py demo NVDA --llm
 
 | 子命令 | 用法 | 说明 |
 |--------|------|------|
+| **paper-cycle** | `python cli.py paper-cycle [--symbols A,B] [--mock] [--run_id ID]` | **推荐**：单周期 autonomous paper，落盘 runs/，含 rebalance_plan / portfolio_after |
 | **demo** | `python cli.py demo [SYMBOL] [--mock] [--llm]` | E2E：研究 → 策略 → 回测 → 总结（四块） |
 | **research** | `python cli.py research [SYMBOL] [--mock] [--llm]` | Research → 输出 Contract JSON |
 | **backtest** | `python cli.py backtest [SYMBOL] [--start] [--end] [--mock] [--llm]` | Research → 回测 → Store，打印指标 |
-| **paper** | `python cli.py paper [--symbol SYMBOL] [--once] [--mock] [--llm]` | Research → Contract → **默认 Nautilus 短窗口回测**；Kill Switch：STOP_PAPER / .paper_stop |
+| **paper** | `python cli.py paper [--symbol SYMBOL] [--mock] [--llm]` | 兼容：内部复用 paper-cycle；Kill Switch：STOP_PAPER / .paper_stop |
 
 ### OpenClaw 最快验证
 

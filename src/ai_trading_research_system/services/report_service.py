@@ -89,7 +89,7 @@ def generate_and_write(
         evolution_guardrail_summary=evolution_guardrail_summary or {},
         research_reasoning_summary=research_reasoning_summary or {},
     )
-    report_dir = report_dir or Path(".")
+    report_dir = report_dir or Path.cwd() / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)
     report_path = report_dir / f"weekly_report_{mandate.mandate_id}.json"
     with open(report_path, "w", encoding="utf-8") as f:

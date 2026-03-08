@@ -1,5 +1,6 @@
 """Command: run paper (research → contract → paper inject).
-主路径：非 IBKR 时复用 run_autonomous_paper_cycle，状态与审计落盘。IBKR 路径为兼容层，仍走 paper_pipe + place_market_buy。
+Deprecated compatibility layer: 非 IBKR 时复用 run_autonomous_paper_cycle，状态与审计落盘。
+新开发请使用 autonomous_paper_cycle / paper-cycle；IBKR 路径仍走 paper_pipe + place_market_buy。
 """
 from __future__ import annotations
 

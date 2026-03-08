@@ -1,6 +1,11 @@
 # OpenClaw Autonomous Paper 架构收敛交付说明
 
-## 一、改动文件清单
+**第一轮**：RunStore、autonomous_paper_cycle 主路径、runs/ 落盘。  
+**第二轮**：分阶段编排、RebalancePlan、portfolio_after、state-aware RunStore、replay_run、current-path 导航。见 [current-path.md](current-path.md)。
+
+---
+
+## 一、改动文件清单（第一轮 + 第二轮）
 
 ### 新增
 - `src/ai_trading_research_system/state/__init__.py` — state 包入口

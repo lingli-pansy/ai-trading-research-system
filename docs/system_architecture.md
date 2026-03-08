@@ -67,7 +67,7 @@ flowchart TB
 
 **唯一业务入口**：`application.commands`。CLI 与 OpenClaw 均通过 `application.command_registry` 调用，禁止直接调用 pipeline。
 
-- **OpenClaw agent 主入口（单周期 paper）**：`autonomous_paper_cycle`。Agent 只需调用此命令即可完成：读组合快照 → 研究/打分 → 规则/风控 → 最终决策 → 订单意图（可选执行）→ **全部落盘**（`runs/<run_id>/`）。输入/输出契约见 `openclaw/contract.AutonomousPaperCycleInput/Output`；实现见 `pipeline/autonomous_paper_cycle.run_autonomous_paper_cycle`。
+- **OpenClaw agent 主入口（单周期 paper）**：`autonomous_paper_cycle`。分阶段：load_state → build_research_bundle → evaluate_trigger_and_allocate → build_rebalance_plan → execute_paper_orders → finalize_run。输出含 **RebalancePlan**（OPEN/ADD/TRIM/CLOSE/HOLD）、**portfolio_before/portfolio_after**、order_intents。输入/输出契约见 `openclaw/contract`；实现见 `pipeline/autonomous_paper_cycle`。
 - **命令元数据 Single Source of Truth**：`openclaw/registry.py`。维护所有命令的 canonical、aliases、description、input/output schema、example、handler_target、expose_for_openclaw。alias→canonical 解析**仅在此实现**；`command_registry` 仅从 registry 读取并绑定 handler，CLI 与 run_for_openclaw 不维护命令/别名表。
 - **Canonical commands**：`research_symbol`、`backtest_symbol`、`run_demo`、`run_paper`、`autonomous_paper_cycle`、`weekly_autonomous_paper`、`weekly_report`。**Aliases**：`research`、`backtest`、`demo`、`paper`、`paper-cycle`/`paper_cycle`、`weekly-paper`（`weekly_report` 无别名）。
 - **CLI**：`presentation/cli.py` 仅做：解析参数 → `command_registry.run` → `renderers.render`。不包含业务逻辑、不调用 pipeline。`paper-cycle` 子命令对应 `autonomous_paper_cycle`。
@@ -85,7 +85,8 @@ flowchart TB
   - `runs/<run_id>/artifacts/candidate_decision.json`、`final_decision.json`、`order_intents.json`
   - `runs/<run_id>/execution/paper_result.json`
   - `runs/<run_id>/audit.json` — 追加型审计列表
-- **最小 replay**：`RunStore.read_run_summary(run_id)` 可基于某次 run 的落盘结果做复盘/重建 summary。
+- **Replay**：`RunStore.replay_run(run_id)` 返回 symbols、ranking、trigger、decision、rebalance_plan、execution、portfolio_before/after；`get_latest_run_summary()`、`get_latest_portfolio_state()`、`get_previous_research_snapshot(symbol)` 供 agent introspection。
+- **周报与报告**：周报 JSON 统一写入 **`reports/`**（`report_service`、`weekly_finish_service`、`weekly_paper_pipe` 默认 `Path.cwd() / "reports"`），不在项目根目录落盘。
 
 ---
 

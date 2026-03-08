@@ -1,21 +1,8 @@
 """
-RunStore: 统一负责 paper run 的路径、命名、读写与版本字段。
-所有 run / snapshot / decision / execution / audit 落盘必须经此接口，禁止各 service 直接写文件。
-目录布局（可配置根目录，默认 runs/）：
-  runs/
-    <run_id>/
-      meta.json           # 本轮 run metadata
-      snapshots/
-        portfolio_before.json
-        portfolio_after.json
-        research.json     # 本轮用到的研究/市场输入快照（精简）
-      artifacts/
-        candidate_decision.json
-        final_decision.json
-        order_intents.json
-      execution/
-        paper_result.json
-      audit.json          # 追加型审计日志（列表）
+RunStore: state-aware 统一数据访问。
+所有 run / snapshot / decision / execution / audit 落盘必须经此接口。
+Public API: write_snapshot, write_artifact, write_execution, read_snapshot, read_meta, read_audit,
+get_latest_portfolio_state, get_previous_research_snapshot, get_latest_run_summary, replay_run.
 """
 from __future__ import annotations
 
@@ -46,8 +33,8 @@ def _iso_now() -> str:
 
 class RunStore:
     """
-    统一数据访问：run metadata、portfolio/research snapshot、decision artifact、
-    order intent、paper execution、audit。所有落盘结构可读、可回放、可排查。
+    State-aware 统一数据访问：run metadata、snapshot、artifact、execution、audit。
+    优先读本地落盘状态，再决定是否请求外部 API。
     """
 
     def __init__(self, root: Path | None = None):
@@ -65,6 +52,7 @@ class RunStore:
     def _execution_dir(self, run_id: str) -> Path:
         return self._run_dir(run_id) / "execution"
 
+    # ---------- create / meta ----------
     def create_run(
         self,
         run_id: str,
@@ -94,7 +82,6 @@ class RunStore:
         return run_dir
 
     def write_meta(self, run_id: str, meta: dict[str, Any]) -> None:
-        """写入/覆盖本轮 run metadata。"""
         run_dir = self._run_dir(run_id)
         run_dir.mkdir(parents=True, exist_ok=True)
         path = run_dir / "meta.json"
@@ -105,88 +92,130 @@ class RunStore:
             json.dump(payload, f, ensure_ascii=False, indent=2)
 
     def read_meta(self, run_id: str) -> dict[str, Any] | None:
-        """读取本轮 run metadata；不存在返回 None。"""
         path = self._run_dir(run_id) / "meta.json"
         if not path.exists():
             return None
         with open(path, encoding="utf-8") as f:
             return json.load(f)
 
-    def write_portfolio_snapshot(
-        self, run_id: str, kind: str, data: dict[str, Any]
-    ) -> None:
-        """kind: 'before' | 'after'。写入 snapshots/portfolio_<kind>.json。"""
-        self.create_run(run_id, **({"symbols": data.get("symbols", [])} if data else {}))
-        path = self._snapshots_dir(run_id) / f"portfolio_{kind}.json"
-        payload = dict(data)
-        payload["_written_at"] = _iso_now()
-        payload["_kind"] = kind
+    # ---------- Public: write_snapshot / read_snapshot ----------
+    def write_snapshot(self, run_id: str, kind: str, data: dict[str, Any]) -> str:
+        """
+        kind: portfolio_before | portfolio_after | research.
+        返回写入路径（用于 write_paths）。
+        """
+        self.create_run(run_id)
+        if kind in ("portfolio_before", "portfolio_after"):
+            kind_short = kind.replace("portfolio_", "")
+            path = self._snapshots_dir(run_id) / f"portfolio_{kind_short}.json"
+            payload = dict(data)
+            payload["_written_at"] = _iso_now()
+            payload["_kind"] = kind_short
+        elif kind == "research":
+            path = self._snapshots_dir(run_id) / "research.json"
+            payload = dict(data)
+            payload["_written_at"] = _iso_now()
+        else:
+            raise ValueError(f"unknown snapshot kind: {kind}")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
+        return str(path)
 
-    def read_portfolio_snapshot(
-        self, run_id: str, kind: str
-    ) -> dict[str, Any] | None:
-        """kind: 'before' | 'after'。"""
-        path = self._snapshots_dir(run_id) / f"portfolio_{kind}.json"
+    def read_snapshot(self, run_id: str, kind: str) -> dict[str, Any] | None:
+        """kind: portfolio_before | portfolio_after | research."""
+        if kind in ("portfolio_before", "portfolio_after"):
+            k = kind.replace("portfolio_", "")
+            path = self._snapshots_dir(run_id) / f"portfolio_{k}.json"
+        elif kind == "research":
+            path = self._snapshots_dir(run_id) / "research.json"
+        else:
+            return None
         if not path.exists():
             return None
         with open(path, encoding="utf-8") as f:
             return json.load(f)
+
+    def write_portfolio_snapshot(self, run_id: str, kind: str, data: dict[str, Any]) -> None:
+        """kind: 'before' | 'after'。保留兼容。"""
+        self.write_snapshot(run_id, f"portfolio_{kind}", data)
+
+    def read_portfolio_snapshot(self, run_id: str, kind: str) -> dict[str, Any] | None:
+        """kind: 'before' | 'after'。"""
+        return self.read_snapshot(run_id, f"portfolio_{kind}")
 
     def write_research_snapshot(self, run_id: str, data: dict[str, Any]) -> None:
-        """写入 snapshots/research.json（本轮用到的研究/市场输入快照，精简版）。"""
-        self.create_run(run_id)
-        path = self._snapshots_dir(run_id) / "research.json"
-        payload = dict(data)
-        payload["_written_at"] = _iso_now()
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
+        self.write_snapshot(run_id, "research", data)
 
     def read_research_snapshot(self, run_id: str) -> dict[str, Any] | None:
-        path = self._snapshots_dir(run_id) / "research.json"
+        return self.read_snapshot(run_id, "research")
+
+    # ---------- Public: write_artifact ----------
+    def write_artifact(self, run_id: str, name: str, data: Any) -> str:
+        """
+        name: candidate_decision | final_decision | order_intents | rebalance_plan.
+        data: dict 或 list（order_intents）。返回写入路径。
+        """
+        self.create_run(run_id)
+        path = self._artifacts_dir(run_id) / f"{name}.json"
+        if name == "order_intents":
+            payload = {"intents": data if isinstance(data, list) else [], "_written_at": _iso_now()}
+        else:
+            payload = dict(data) if isinstance(data, dict) else {"data": data}
+            payload["_written_at"] = _iso_now()
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        return str(path)
+
+    def write_candidate_decision(self, run_id: str, data: dict[str, Any]) -> None:
+        self.write_artifact(run_id, "candidate_decision", data)
+
+    def write_final_decision(self, run_id: str, data: dict[str, Any]) -> None:
+        self.write_artifact(run_id, "final_decision", data)
+
+    def write_order_intents(self, run_id: str, data: list[dict[str, Any]]) -> None:
+        self.write_artifact(run_id, "order_intents", data)
+
+    def write_rebalance_plan(self, run_id: str, data: dict[str, Any]) -> str:
+        return self.write_artifact(run_id, "rebalance_plan", data)
+
+    def read_artifact(self, run_id: str, name: str) -> dict[str, Any] | list | None:
+        """name: candidate_decision | final_decision | order_intents | rebalance_plan."""
+        path = self._artifacts_dir(run_id) / f"{name}.json"
         if not path.exists():
             return None
         with open(path, encoding="utf-8") as f:
-            return json.load(f)
+            out = json.load(f)
+        if name == "order_intents" and isinstance(out, dict):
+            return out.get("intents", [])
+        return out
 
-    def write_candidate_decision(self, run_id: str, data: dict[str, Any]) -> None:
-        """写入 artifacts/candidate_decision.json。"""
-        self.create_run(run_id)
-        path = self._artifacts_dir(run_id) / "candidate_decision.json"
-        payload = dict(data)
-        payload["_written_at"] = _iso_now()
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
+    def read_rebalance_plan(self, run_id: str) -> dict[str, Any] | None:
+        out = self.read_artifact(run_id, "rebalance_plan")
+        return out if isinstance(out, dict) else None
 
-    def write_final_decision(self, run_id: str, data: dict[str, Any]) -> None:
-        """写入 artifacts/final_decision.json。"""
-        self.create_run(run_id)
-        path = self._artifacts_dir(run_id) / "final_decision.json"
-        payload = dict(data)
-        payload["_written_at"] = _iso_now()
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
-
-    def write_order_intents(self, run_id: str, data: list[dict[str, Any]]) -> None:
-        """写入 artifacts/order_intents.json。"""
-        self.create_run(run_id)
-        path = self._artifacts_dir(run_id) / "order_intents.json"
-        payload = {"intents": data, "_written_at": _iso_now()}
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
-
-    def write_paper_execution(self, run_id: str, data: dict[str, Any]) -> None:
-        """写入 execution/paper_result.json。"""
+    # ---------- Public: write_execution ----------
+    def write_execution(self, run_id: str, data: dict[str, Any]) -> str:
+        """写入 execution/paper_result.json。返回路径。"""
         self.create_run(run_id)
         path = self._execution_dir(run_id) / "paper_result.json"
         payload = dict(data)
         payload["_written_at"] = _iso_now()
         with open(path, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
+        return str(path)
 
+    def write_paper_execution(self, run_id: str, data: dict[str, Any]) -> None:
+        self.write_execution(run_id, data)
+
+    def read_execution(self, run_id: str) -> dict[str, Any] | None:
+        path = self._execution_dir(run_id) / "paper_result.json"
+        if not path.exists():
+            return None
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+
+    # ---------- audit ----------
     def append_audit(self, run_id: str, entry: dict[str, Any]) -> None:
-        """追加一条审计记录到 audit.json（文件内为 list）。"""
         self.create_run(run_id)
         path = self._run_dir(run_id) / "audit.json"
         entry = dict(entry)
@@ -207,8 +236,23 @@ class RunStore:
         with open(path, encoding="utf-8") as f:
             return json.load(f)
 
+    # ---------- paths for write_paths (public，不暴露内部 dir) ----------
+    def path_for_snapshot(self, run_id: str, kind: str) -> str:
+        """kind: portfolio_before | portfolio_after | research。返回用于展示的路径字符串。"""
+        if kind in ("portfolio_before", "portfolio_after"):
+            k = kind.replace("portfolio_", "")
+            return str(self._snapshots_dir(run_id) / f"portfolio_{k}.json")
+        if kind == "research":
+            return str(self._snapshots_dir(run_id) / "research.json")
+        return ""
+
+    def path_for_artifact(self, run_id: str, name: str) -> str:
+        return str(self._artifacts_dir(run_id) / f"{name}.json")
+
+    def path_for_execution(self, run_id: str) -> str:
+        return str(self._execution_dir(run_id) / "paper_result.json")
+
     def list_runs(self, limit: int = 50) -> list[str]:
-        """按目录 mtime 倒序返回 run_id 列表。"""
         if not self._root.exists():
             return []
         run_ids = [
@@ -223,51 +267,115 @@ class RunStore:
         return run_ids[:limit]
 
     def read_latest_run_id(self) -> str | None:
-        """最近一次 run 的 run_id；无则 None。"""
         runs = self.list_runs(limit=1)
         return runs[0] if runs else None
 
     def run_dir(self, run_id: str) -> Path:
-        """返回本轮 run 的根目录 Path（供调用方拼写 report 等）。"""
         return self._run_dir(run_id)
 
-    def read_run_summary(self, run_id: str) -> dict[str, Any] | None:
+    # ---------- State-aware: get_latest_portfolio_state ----------
+    def get_latest_portfolio_state(self) -> dict[str, Any] | None:
         """
-        基于某次 run 的落盘结果做一次复盘/重建 summary（最小 replay 能力）。
-        返回可读的 summary dict，便于排查与展示。
+        优先：runs/<latest_run>/snapshots/portfolio_after.json；
+        否则 fallback：account snapshot API。
+        """
+        rid = self.read_latest_run_id()
+        if rid:
+            after = self.read_snapshot(rid, "portfolio_after")
+            if after:
+                return after
+        try:
+            from ai_trading_research_system.autonomous import get_account_snapshot
+            snap = get_account_snapshot(paper=True, mock=True, initial_cash=10_000.0, allow_fallback=True)
+            return {
+                "cash": snap.cash,
+                "equity": snap.equity,
+                "positions": list(snap.positions or []),
+                "source": snap.source,
+                "timestamp": snap.timestamp,
+                "risk_budget": getattr(snap, "risk_budget", 0),
+            }
+        except Exception:
+            return None
+
+    # ---------- State-aware: get_previous_research_snapshot(symbol) ----------
+    def get_previous_research_snapshot(self, symbol: str) -> dict[str, Any] | None:
+        """若上一轮 run 存在 research snapshot，返回该 symbol 的条目。"""
+        rid = self.read_latest_run_id()
+        if not rid:
+            return None
+        data = self.read_snapshot(rid, "research")
+        if not data or "by_symbol" not in data:
+            return None
+        for entry in data.get("by_symbol", []):
+            if entry.get("symbol") == symbol:
+                return entry
+        return None
+
+    # ---------- get_latest_run_summary ----------
+    def get_latest_run_summary(self) -> dict[str, Any] | None:
+        """快速返回：run_id, final_decision, order_intents, portfolio_after。"""
+        rid = self.read_latest_run_id()
+        if not rid:
+            return None
+        final = self.read_artifact(rid, "final_decision")
+        intents = self.read_artifact(rid, "order_intents")
+        if isinstance(intents, dict) and "intents" in intents:
+            intents = intents["intents"]
+        after = self.read_snapshot(rid, "portfolio_after")
+        return {
+            "run_id": rid,
+            "final_decision": final,
+            "order_intents": intents if isinstance(intents, list) else [],
+            "portfolio_after": after,
+        }
+
+    # ---------- replay_run ----------
+    def replay_run(self, run_id: str) -> dict[str, Any] | None:
+        """
+        完整 replay summary：symbols, ranking, trigger, decision, rebalance_plan, execution, portfolio_after。
+        用于 debug、agent introspection、CLI replay。
         """
         meta = self.read_meta(run_id)
         if not meta:
             return None
-        before = self.read_portfolio_snapshot(run_id, "before")
-        after = self.read_portfolio_snapshot(run_id, "after")
-        final = None
-        path = self._artifacts_dir(run_id) / "final_decision.json"
-        if path.exists():
-            with open(path, encoding="utf-8") as f:
-                final = json.load(f)
+        research = self.read_snapshot(run_id, "research")
+        candidate = self.read_artifact(run_id, "candidate_decision")
+        final = self.read_artifact(run_id, "final_decision")
+        rebalance_plan = self.read_artifact(run_id, "rebalance_plan")
+        execution = self.read_execution(run_id)
+        before = self.read_snapshot(run_id, "portfolio_before")
+        after = self.read_snapshot(run_id, "portfolio_after")
         audit_entries = self.read_audit(run_id)
-        paper_path = self._execution_dir(run_id) / "paper_result.json"
-        paper_result = None
-        if paper_path.exists():
-            with open(paper_path, encoding="utf-8") as f:
-                paper_result = json.load(f)
+        ranking = research.get("opportunity_ranking", []) if research else []
+        if research and "by_symbol" in research:
+            ranking = ranking or [{"symbol": e.get("symbol"), "action": e.get("suggested_action"), "confidence": e.get("confidence")} for e in research["by_symbol"]]
+        trigger = None
+        for e in audit_entries:
+            if "trigger" in e:
+                trigger = e.get("trigger")
+                break
         return {
             "run_id": run_id,
-            "mode": meta.get("mode", ""),
             "symbols": meta.get("symbols", []),
+            "ranking": ranking,
+            "trigger": trigger,
+            "decision": final,
+            "final_decision": final,
+            "rebalance_plan": rebalance_plan,
+            "execution": execution,
+            "portfolio_before": before,
+            "portfolio_after": after,
             "started_at": meta.get("started_at"),
             "ended_at": meta.get("ended_at"),
             "error": meta.get("error"),
-            "portfolio_before": before,
-            "portfolio_after": after,
-            "final_decision": final,
             "audit_count": len(audit_entries),
-            "audit_tail": audit_entries[-5:] if len(audit_entries) > 5 else audit_entries,
-            "paper_result": paper_result,
         }
+
+    def read_run_summary(self, run_id: str) -> dict[str, Any] | None:
+        """兼容旧名：等同于 replay_run 的简化版。"""
+        return self.replay_run(run_id)
 
 
 def get_run_store(root: Path | None = None) -> RunStore:
-    """获取全局 RunStore 实例（每次新建，无单例）。"""
     return RunStore(root=root)

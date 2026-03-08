@@ -132,7 +132,7 @@ def format_result(task: str, result: Any, *, command_override: str | None = None
         }
         return out
     if task == "autonomous_paper_cycle":
-        # CycleOutput: ok, run_id, candidate_decision, final_decision, order_intents, no_trade_reason, ...
+        # CycleOutput: ok, run_id, candidate_decision, final_decision, order_intents, rebalance_plan, ...
         return {
             "ok": result.ok,
             "command": command_override or task,
@@ -140,6 +140,7 @@ def format_result(task: str, result: Any, *, command_override: str | None = None
             "candidate_decision": result.candidate_decision,
             "final_decision": result.final_decision,
             "order_intents": result.order_intents,
+            "rebalance_plan": getattr(result, "rebalance_plan", {}),
             "no_trade_reason": result.no_trade_reason,
             "rejected_reason": result.rejected_reason,
             "skipped_reason": result.skipped_reason,

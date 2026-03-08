@@ -2,6 +2,8 @@
 
 面向新协作者：**能跑通什么、mock 与过渡、如何验证与降级**。
 
+**报告位置**：周报与 mandate 报告统一写入 **`reports/`**（默认 `Path.cwd() / "reports"`）；勿在项目根目录落盘。**后续验证均不使用 mock**：联调与验收使用真实数据（yfinance/IBKR）；仅 CI 或本地快速回归时使用 `verify_uc09_mock.py` 或 `--mock`。
+
 **控制面**：CLI 与 OpenClaw 统一走 `application.commands`；OpenClaw 契约见 `openclaw/contract.py`（persona、skills、command contract）。control/ 已删除。
 
 **命令面 Single Source of Truth**：`openclaw/registry.py`。所有命令的 canonical 名、aliases、description、input/output schema、example、handler_target、expose_for_openclaw 仅在此维护。`application/command_registry.py` 只从 registry 读取并做 alias→canonical 解析与 handler 绑定；CLI 与 `run_for_openclaw.py` 均不维护命令列表或别名表。
@@ -43,13 +45,15 @@
 
 ## 4. 验证脚本
 
+**约定**：后续验证与联调**均不使用 mock**，使用真实数据；仅 CI/快速回归时用 mock。
+
 | 脚本 | 说明 |
 |------|------|
 | `python scripts/check_dev_prerequisites.py` | 开发前环境与权限核对 |
-| `python scripts/run_e2e_check.py NVDA --mock` | E2E：Pipeline 与 ExperienceStore 有数据 |
+| `python scripts/run_e2e_check.py NVDA` | E2E（真实数据）；加 `--mock` 仅用于 CI/回归 |
 | `python scripts/verify_experience_store.py` | 最新 strategy_run、backtest_result、trade_experience、experience_summary 等 |
-| `.venv/bin/python scripts/verify_uc09_mock.py` | UC-09 mock 回归 |
-| `.venv/bin/python scripts/verify_uc09_real.py` | UC-09 真实联调 |
+| `.venv/bin/python scripts/verify_uc09_mock.py` | UC-09 mock 回归（仅 CI/本地快速回归） |
+| `.venv/bin/python scripts/verify_uc09_real.py` | UC-09 真实验证（默认，推荐联调与验收） |
 
 ---
 
