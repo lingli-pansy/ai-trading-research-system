@@ -21,7 +21,7 @@ def handle_trading_intent_sync(
     message: str,
     *,
     config_path: str | None = None,
-    timeout_seconds: float = 30.0,
+    timeout_seconds: float = 90.0,
 ) -> dict[str, Any]:
     """
     OpenClaw workspace 唯一推荐入口：同步桥接。

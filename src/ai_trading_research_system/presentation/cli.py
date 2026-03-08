@@ -128,7 +128,7 @@ def main() -> int:
     p_trading_intent_sync = subparsers.add_parser("openclaw-trading-intent-sync", help="[用户/agent 主入口] 唯一推荐：调用 handle_trading_intent_sync，四类指令一次返回 status/summary/details。")
     p_trading_intent_sync.add_argument("--message-json", required=True, help='JSON with "message" key, e.g. \'{"message": "开始建仓"}\'')
     p_trading_intent_sync.add_argument("--config", default=None, help="Path to OpenClaw agent config (optional)")
-    p_trading_intent_sync.add_argument("--timeout", type=float, default=30, help="Timeout seconds (default 30)")
+    p_trading_intent_sync.add_argument("--timeout", type=float, default=90, help="Timeout seconds (default 90)")
 
     p_proposal_run = subparsers.add_parser("proposal-run", help="Generate proposal only (no approval, no execution)")
     p_proposal_run.add_argument("--symbols", default="NVDA", help="Comma-separated symbols (default: NVDA)")
@@ -284,7 +284,7 @@ def main() -> int:
             out = handle_trading_intent_sync(
                 msg,
                 config_path=getattr(args, "config", None),
-                timeout_seconds=getattr(args, "timeout", 30) or 30,
+                timeout_seconds=getattr(args, "timeout", 90) or 90,
             )
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return 0 if out.get("status") != "error" else 1

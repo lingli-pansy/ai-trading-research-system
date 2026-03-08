@@ -338,7 +338,7 @@ def format_openclaw_run_output(summary: dict[str, Any], *, include_context: bool
 
 IntentType = Literal["start_build_position", "show_portfolio", "review_latest_proposal", "approve_execution", "unknown"]
 IntentStatus = Literal["ok", "error", "no_proposal", "pending_confirmation"]
-DEFAULT_INTENT_TIMEOUT_SECONDS = 30
+DEFAULT_INTENT_TIMEOUT_SECONDS = 90
 
 # summary 中严禁出现，否则替换为业务化提示（面向用户）
 FORBIDDEN_SUMMARY_TOKENS = (
