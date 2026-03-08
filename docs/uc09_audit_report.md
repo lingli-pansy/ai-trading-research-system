@@ -200,3 +200,45 @@ RuntimeError: Reject mock: benchmark data from IB required. Check IB Gateway and
 
 - **阻塞点**: `finish_week` 调用 `get_benchmark_return(lookback_days=duration_days)`，当 `--days 1` 时 `lookback_days=1`，`get_benchmark_series` 仅请求 1 日 bars，得到 1 根 K 线，不满足 `len(bars) >= 2`，返回空序列，`reject_mock=True` 导致 raise。
 - **最小修复所在函数**: `services/weekly_finish_service.finish_week`（调用处改为 `lookback_days=max(2, duration_days)`），或 `data/market_data_service.MarketDataService.get_benchmark_series`（请求 bars 时 `duration_days=max(2, lookback_days)`）。
+
+---
+
+## 8. 最新验证（仅运行、记录）
+
+**验证时间**: 2026-03-08（本轮未改代码）
+
+### 8.1 运行一：`weekly-paper --symbols SPY --days 1`
+
+| 指标 | 值 |
+|------|-----|
+| IB connection latency | 2.51s |
+| account_summary latency | 0.27s |
+| positions latency | 0.00s |
+| open_orders latency | 0.00s |
+| benchmark latency（管程内） | 0.44s / 0.00s / 0.52s |
+| snapshot_source | ibkr |
+| report_path | —（未生成，finish_week 前抛错） |
+| final status | exit 1，RuntimeError in finish_week |
+
+**成功标准检查**: snapshot_source≠mock ✅；benchmark loaded（管程内）✅；weekly report generated ❌；decision trace written ❌；experience store updated ❌。
+
+### 8.2 运行二：`weekly-paper --symbols SPY,QQQ,NVDA --days 1 --llm`
+
+| 指标 | 值 |
+|------|-----|
+| IB connection latency | 首连 Error 326（clientId 1 占用），standalone snapshot 2.12s |
+| account_summary latency | 0.33s |
+| positions latency | 0.00s |
+| open_orders latency | 0.00s |
+| benchmark latency（管程内） | 1.55s / 0.00s / 1.84s |
+| snapshot_source | ibkr |
+| report_path | —（未生成） |
+| final status | exit 1，RuntimeError in finish_week |
+
+**成功标准检查**: snapshot_source≠mock ✅；benchmark loaded（管程内）✅；weekly report generated ❌；decision trace written ❌；experience store updated ❌。
+
+### 8.3 结论
+
+**UC-09 是否完成？** **NO**
+
+两轮均在 `finish_week` 内 `get_benchmark_return(lookback_days=1)` 处因“1 日仅 1 根 bar、不满足至少 2 根”返回空并触发 reject_mock 抛错，未生成周报、未写 decision trace、未写 experience store。阻塞点与最小修复方案见第 4、5、7.4 节，未实施修复前 UC-09 real mode 不通过。
