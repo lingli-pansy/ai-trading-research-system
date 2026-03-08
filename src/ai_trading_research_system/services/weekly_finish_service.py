@@ -17,8 +17,15 @@ from ai_trading_research_system.experience.store import (
     write_weekly_portfolio_experience,
     write_portfolio_health_snapshot,
     write_experience_insight_snapshot,
+    write_evolution_proposal_snapshot,
+    write_evolution_decision_snapshot,
 )
 from ai_trading_research_system.experience.analyzer import analyze_experience_from_store
+from ai_trading_research_system.experience.evolution_boundary import (
+    build_evolution_proposal_from_insights,
+    decide_evolution,
+)
+from ai_trading_research_system.autonomous.portfolio_policy import default_policy
 
 # Avoid circular import: pipe defines WeeklyPaperResult
 def _result_type():
@@ -83,6 +90,16 @@ def finish_week(
         "strategy_adjustment_suggested": insights.strategy_adjustment_suggested,
         "insights": insights.to_dict(),
     }
+    # Evolution Approval Boundary: insights → Proposal → Decision
+    current_policy = getattr(mandate, "policy", None) or default_policy()
+    proposal = build_evolution_proposal_from_insights(insights, current_policy, auto_applicable=False)
+    decision = decide_evolution(proposal, current_policy)
+    proposed_evolution = proposal.to_dict()
+    approved_evolution = decision.to_dict()
+    rejected_evolution = list(decision.rejected_adjustments)
+    period = f"day_0_to_{duration_days}"
+    write_evolution_proposal_snapshot(mandate_id=mandate.mandate_id, period=period, proposal=proposed_evolution)
+    write_evolution_decision_snapshot(mandate_id=mandate.mandate_id, period=period, decision=approved_evolution)
     why_replacements = ""
     if replacement_decisions:
         why_replacements = f"因新机会分数差达到策略阈值，执行 {len(replacement_decisions)} 次仓位替换。"
@@ -107,8 +124,10 @@ def finish_week(
         portfolio_health=portfolio_health or {},
         health_based_adjustments=health_based_adjustments or [],
         experience_insights=experience_insights_report,
+        proposed_evolution=proposed_evolution,
+        approved_evolution=approved_evolution,
+        rejected_evolution=rejected_evolution,
     )
-    period = f"day_0_to_{duration_days}"
     if portfolio_health:
         write_portfolio_health_snapshot(mandate_id=mandate.mandate_id, period=period, snapshot=portfolio_health)
     policy_obj = getattr(mandate, "policy", None)
@@ -143,6 +162,7 @@ def finish_week(
         period=period,
         insights=insights.to_dict(),
     )
+    # period already set above
     market_data_source = "mock" if use_mock else "yfinance"
     summary = build_weekly_result_summary(
         portfolio_return=portfolio_return,

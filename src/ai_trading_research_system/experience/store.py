@@ -109,6 +109,20 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             insights_json TEXT NOT NULL,
             created_at TEXT DEFAULT (datetime('now'))
         );
+        CREATE TABLE IF NOT EXISTS evolution_proposal_snapshot (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mandate_id TEXT NOT NULL,
+            period TEXT NOT NULL,
+            proposal_json TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS evolution_decision_snapshot (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mandate_id TEXT NOT NULL,
+            period TEXT NOT NULL,
+            decision_json TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
     """)
     # Migration: add policy_snapshot if missing (existing DBs)
     try:
@@ -148,6 +162,54 @@ def write_intraday_trigger_event(
                 severity,
                 json.dumps(positions_changed or [], ensure_ascii=False),
             ),
+        )
+        conn.commit()
+        return cur.lastrowid or 0
+    finally:
+        conn.close()
+
+
+def write_evolution_proposal_snapshot(
+    mandate_id: str,
+    period: str,
+    proposal: dict[str, Any],
+    *,
+    db_path: Path | None = None,
+) -> int:
+    """Write one evolution_proposal_snapshot row. Returns row id."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO evolution_proposal_snapshot (mandate_id, period, proposal_json)
+            VALUES (?, ?, ?)
+            """,
+            (mandate_id, period, json.dumps(proposal, ensure_ascii=False)),
+        )
+        conn.commit()
+        return cur.lastrowid or 0
+    finally:
+        conn.close()
+
+
+def write_evolution_decision_snapshot(
+    mandate_id: str,
+    period: str,
+    decision: dict[str, Any],
+    *,
+    db_path: Path | None = None,
+) -> int:
+    """Write one evolution_decision_snapshot row. Returns row id."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO evolution_decision_snapshot (mandate_id, period, decision_json)
+            VALUES (?, ?, ?)
+            """,
+            (mandate_id, period, json.dumps(decision, ensure_ascii=False)),
         )
         conn.commit()
         return cur.lastrowid or 0

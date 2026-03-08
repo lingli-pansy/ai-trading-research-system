@@ -21,8 +21,17 @@ from ai_trading_research_system.experience.store import (
     write_weekly_portfolio_experience,
     write_health_trigger_event,
     write_experience_insight_snapshot,
+    write_evolution_proposal_snapshot,
+    write_evolution_decision_snapshot,
     read_weekly_portfolio_experience_history,
 )
+from ai_trading_research_system.experience.evolution_boundary import (
+    EvolutionProposal,
+    EvolutionDecision,
+    build_evolution_proposal_from_insights,
+    decide_evolution,
+)
+from ai_trading_research_system.autonomous.portfolio_policy import default_policy
 from ai_trading_research_system.autonomous.portfolio_policy import PortfolioDecisionPolicy
 from ai_trading_research_system.autonomous.weekly_report import WeeklyReportGenerator
 from ai_trading_research_system.autonomous.benchmark import BenchmarkResult
@@ -229,3 +238,98 @@ def test_analyze_experience_from_store():
             assert len(hist) >= 1
         finally:
             os.environ.pop("EXPERIENCE_DB_PATH", None)
+
+
+def test_evolution_proposal_created_from_insights():
+    """从 ExperienceInsights 可构建 EvolutionProposal，含 proposed_policy_adjustments、proposed_strategy_adjustments、source_insights、confidence、rationale、auto_applicable。"""
+    insights = ExperienceInsights(
+        frequent_replacement_failures=[{"reason": "score_gap_below_threshold", "count": 3}],
+        strategy_adjustment_suggested=True,
+    )
+    policy = default_policy()
+    proposal = build_evolution_proposal_from_insights(insights, policy, auto_applicable=True)
+    assert isinstance(proposal, EvolutionProposal)
+    assert "minimum_score_gap_for_replacement" in proposal.proposed_policy_adjustments
+    assert "max_replacements_per_rebalance" in proposal.proposed_policy_adjustments
+    assert "entry_filters_adjustment" in proposal.proposed_strategy_adjustments
+    assert proposal.source_insights
+    assert proposal.confidence >= 0
+    assert proposal.rationale
+    assert proposal.auto_applicable is True
+    d = proposal.to_dict()
+    assert "proposed_policy_adjustments" in d
+    assert "proposed_strategy_adjustments" in d
+    assert "source_insights" in d
+    assert "auto_applicable" in d
+
+
+def test_policy_adjustment_requires_approval_boundary():
+    """Policy 调整须经 ApprovalBoundary：未 auto_applicable 或置信度不足时保持当前 policy，不直接应用。"""
+    insights = ExperienceInsights(strategy_adjustment_suggested=True)
+    policy = PortfolioDecisionPolicy(
+        minimum_score_gap_for_replacement=0.4,
+        max_replacements_per_rebalance=1,
+        turnover_budget=0.4,
+    )
+    proposal = build_evolution_proposal_from_insights(insights, policy, auto_applicable=False)
+    decision = decide_evolution(proposal, policy)
+    assert isinstance(decision, EvolutionDecision)
+    assert decision.approved_policy is not None
+    assert decision.approved_policy.minimum_score_gap_for_replacement == 0.4
+    assert decision.auto_applied is False
+    assert any(r.get("type") == "policy" for r in decision.rejected_adjustments)
+
+    proposal_auto = build_evolution_proposal_from_insights(insights, policy, auto_applicable=True, confidence_if_suggested=0.8)
+    decision_auto = decide_evolution(proposal_auto, policy, auto_approve_confidence_threshold=0.5)
+    assert decision_auto.auto_applied is True
+    assert decision_auto.approved_policy is not None
+
+
+def test_strategy_adjustment_requires_approval_boundary():
+    """Strategy 调整须经 ApprovalBoundary：不自动批准，approved_strategy_adjustments 为空，拟议项在 rejected 中。"""
+    insights = ExperienceInsights(
+        triggers_excessive_turnover=[{"trigger_type": "opportunity_spike", "high_turnover_weeks": 2}],
+        strategy_adjustment_suggested=True,
+    )
+    policy = default_policy()
+    proposal = build_evolution_proposal_from_insights(insights, policy, auto_applicable=True)
+    decision = decide_evolution(proposal, policy)
+    assert decision.approved_strategy_adjustments == {} or not decision.approved_strategy_adjustments
+    strategy_rejected = [r for r in decision.rejected_adjustments if r.get("type") == "strategy"]
+    assert len(strategy_rejected) >= 1
+    assert "adjustments" in strategy_rejected[0] or "reason" in strategy_rejected[0]
+
+
+def test_weekly_report_records_proposed_vs_approved_evolution():
+    """周报区分 proposed_evolution、approved_evolution、rejected_evolution。"""
+    mandate = WeeklyTradingMandate(mandate_id="m1", watchlist=["NVDA"])
+    bench = BenchmarkResult(
+        portfolio_return=0.0,
+        benchmark_return=0.0,
+        excess_return=0.0,
+        max_drawdown=0.0,
+        trade_count=0,
+        period="day_0_to_5",
+        benchmark_source="mock",
+    )
+    proposed_evolution = {"proposed_policy_adjustments": {"minimum_score_gap_for_replacement": 0.25}, "auto_applicable": False}
+    approved_evolution = {"approved_policy": {"minimum_score_gap_for_replacement": 0.3}, "auto_applied": False}
+    rejected_evolution = [{"type": "policy", "reason": "未启用自动应用"}]
+    gen = WeeklyReportGenerator()
+    report = gen.generate(
+        mandate,
+        bench,
+        key_trades=[],
+        turnover_pct=0.0,
+        proposed_evolution=proposed_evolution,
+        approved_evolution=approved_evolution,
+        rejected_evolution=rejected_evolution,
+    )
+    assert getattr(report, "proposed_evolution", None) == proposed_evolution
+    assert getattr(report, "approved_evolution", None) == approved_evolution
+    assert getattr(report, "rejected_evolution", None) == rejected_evolution
+    d = gen.to_dict(report)
+    assert "proposed_evolution" in d
+    assert "approved_evolution" in d
+    assert "rejected_evolution" in d
+    assert d["rejected_evolution"][0]["type"] == "policy"
