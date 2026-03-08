@@ -467,6 +467,26 @@ def finalize_run(
         }
     store.write_snapshot(run_id, "portfolio_after", after_data)
 
+    # 目标仓位单独落盘，与真实 portfolio_after 分离
+    target_positions: list[dict[str, Any]] = []
+    for item in rebalance_plan.items:
+        if item.target_position <= 0:
+            continue
+        mv_estimate = equity_before * item.target_position if equity_before else 0
+        target_positions.append({
+            "symbol": item.symbol,
+            "weight_pct": item.target_position,
+            "market_value_estimate": mv_estimate,
+            "action_type": item.action_type,
+        })
+    store.write_artifact(run_id, "target_portfolio", {
+        "source": "target",
+        "note": "theoretical target from rebalance_plan",
+        "run_id": run_id,
+        "positions": target_positions,
+        "equity_ref": equity_before,
+    })
+
     if paper_results:
         store.write_execution(run_id, {
             "results": paper_results,
@@ -475,6 +495,8 @@ def finalize_run(
             "total_trade_count": total_trade_count,
             "any_order_done": any_order_done,
             "execution_status": execution_status,
+            "execution_attempted": True,
+            "fills_detected": any_fills,
         })
     store.write_meta(run_id, (store.read_meta(run_id) or {}) | {"ended_at": datetime.now(timezone.utc).isoformat()})
 
