@@ -235,7 +235,7 @@ def main() -> int:
                     "ok": summ.get("ok"),
                     "decision_summary": summ.get("decision_summary"),
                     "risk_flags": summ.get("risk_flags"),
-                    "orders_executed": summ.get("orders_count"),
+                    "orders_executed": summ.get("executed_orders_count", 0),
                     "rebalance_summary": summ.get("rebalance_summary"),
                     "portfolio_before": {"value": summ.get("portfolio_before_value")},
                     "portfolio_after": {"value": summ.get("portfolio_after_value")},

@@ -18,6 +18,9 @@ dependencies = [
   "ib_insync>=0.9.86",
 ]
 
+[project.scripts]
+ai-trading-cli = "ai_trading_research_system.cli:main"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0,<9",

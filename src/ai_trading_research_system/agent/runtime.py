@@ -123,7 +123,13 @@ class AutonomousTradingAgent:
         portfolio_after = store.read_snapshot(run_id, "portfolio_after")
         rebalance_plan = store.read_artifact(run_id, "rebalance_plan") or out.rebalance_plan or {}
         decision_summary = _decision_summary(out.final_decision)
-        orders_count = len(out.order_intents) if out.order_intents else 0
+        order_intents_count = len(out.order_intents) if out.order_intents else 0
+        paper_results = getattr(out, "paper_execution_results", None) or []
+        executed_orders_count = sum(1 for r in paper_results if r.get("order_done"))
+        trade_count = sum(int(r.get("trade_count", 0)) for r in paper_results)
+        execution_status = "executed" if (executed_orders_count > 0 or trade_count > 0) else "no_fills"
+        if not paper_results and order_intents_count == 0:
+            execution_status = "skipped"
         value_after = _portfolio_value(portfolio_after)
         value_before = _portfolio_value(portfolio_before)
         turnover = sum(abs(x.get("delta", 0) or 0) for x in (rebalance_plan.get("items") or []))
@@ -139,7 +145,7 @@ class AutonomousTradingAgent:
             symbols=symbols,
             decision_summary=decision_summary,
             portfolio_value=value_after,
-            orders=orders_count,
+            orders=executed_orders_count,
         )
         store.append_run_index(index_entry.to_dict())
 
@@ -162,9 +168,13 @@ class AutonomousTradingAgent:
             "ok": out.ok,
             "rebalance_plan": rebalance_plan,
             "rebalance_summary": _format_plan_summary(rebalance_plan),
-            "orders_count": orders_count,
+            "order_intents_count": order_intents_count,
+            "executed_orders_count": executed_orders_count,
+            "trade_count": trade_count,
+            "execution_status": execution_status,
             "portfolio_before_value": value_before,
             "portfolio_after_value": value_after,
+            "portfolio_after_source": (portfolio_after or {}).get("source", ""),
             "decision_summary": decision_summary,
             "turnover": turnover,
             "position_count": position_count,
@@ -225,12 +235,16 @@ def _format_plan_summary(plan: dict[str, Any]) -> list[str]:
 
 def format_run_observability(summary: dict[str, Any]) -> str:
     """
-    单次 run 的可观测输出：RUN, PROPOSAL, RISK FLAGS, APPROVAL, EXECUTION, PORTFOLIO。
+    单次 run 的可观测输出：RUN, PROPOSAL, RISK FLAGS, APPROVAL, EXECUTION（区分 intents/executed/trade_count/status）, PORTFOLIO。
     供 CLI 或 OpenClaw 直接打印。
     """
     run_id = summary.get("run_id", "")
     plan_lines = summary.get("rebalance_summary") or []
-    orders = summary.get("orders_count", 0)
+    order_intents_count = summary.get("order_intents_count", 0)
+    executed_orders_count = summary.get("executed_orders_count", 0)
+    trade_count = summary.get("trade_count", 0)
+    execution_status = summary.get("execution_status", "")
+    portfolio_after_source = summary.get("portfolio_after_source", "")
     before = summary.get("portfolio_before_value") or 0
     after = summary.get("portfolio_after_value") or 0
     turnover = summary.get("turnover", 0)
@@ -246,8 +260,12 @@ def format_run_observability(summary: dict[str, Any]) -> str:
         "APPROVAL",
         approval,
         "EXECUTION",
-        f"{orders} orders",
+        f"ORDER_INTENTS {order_intents_count}",
+        f"EXECUTED_ORDERS {executed_orders_count}",
+        f"TRADE_COUNT {trade_count}",
+        f"EXECUTION_STATUS {execution_status or 'unknown'}",
         "PORTFOLIO",
         f"value {before:.0f} → {after:.0f}",
+        f"portfolio_after.source {portfolio_after_source}",
     ]
     return "\n".join(parts)

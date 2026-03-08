@@ -386,10 +386,11 @@ def execute_if_approved(
     execute_paper: bool,
     store: RunStore,
     paths: dict[str, str],
+    order_intents_count: int = 0,
 ) -> list[dict[str, Any]]:
     """根据 decision 决定是否执行；approve 时执行并返回 paper_results，否则返回 []。"""
     if decision.decision != "approve":
-        finalize_run(run_id, store, portfolio_before_dict, filtered_plan, [], paths)
+        finalize_run(run_id, store, portfolio_before_dict, filtered_plan, [], paths, order_intents_count=order_intents_count, execution_status="skipped")
         return []
     paper_results = execute_paper_orders(
         run_id,
@@ -400,7 +401,17 @@ def execute_if_approved(
     )
     if paper_results:
         paths["paper_execution"] = store.path_for_execution(run_id)
-    finalize_run(run_id, store, portfolio_before_dict, filtered_plan, paper_results, paths)
+    executed_orders_count = sum(1 for r in paper_results if r.get("order_done"))
+    total_trade_count = sum(int(r.get("trade_count", 0)) for r in paper_results)
+    any_fills = executed_orders_count > 0 or total_trade_count > 0
+    execution_status = "executed" if any_fills else "no_fills"
+    finalize_run(
+        run_id, store, portfolio_before_dict, filtered_plan, paper_results, paths,
+        order_intents_count=order_intents_count,
+        execution_status=execution_status,
+        executed_orders_count=executed_orders_count,
+        total_trade_count=total_trade_count,
+    )
     return paper_results
 
 
@@ -412,39 +423,59 @@ def finalize_run(
     rebalance_plan: RebalancePlan,
     paper_results: list[dict[str, Any]],
     paths: dict[str, str],
+    *,
+    order_intents_count: int = 0,
+    execution_status: str = "skipped",
+    executed_orders_count: int = 0,
+    total_trade_count: int = 0,
 ) -> None:
-    """写入 portfolio_after（由 rebalance_plan + before 推导）, execution, audit, meta.ended_at。"""
+    """写入 portfolio_after（真实语义：有成交则 source=executed，无成交则 source=unchanged）, execution, audit, meta.ended_at。"""
     equity_before = portfolio_before.get("equity") or portfolio_before.get("cash") or 0
-    positions_before = portfolio_before.get("positions") or []
-    # 推导 after：按 plan 更新权重得到新 positions 简化表示
-    new_positions: list[dict[str, Any]] = []
-    for item in rebalance_plan.items:
-        if item.target_position <= 0:
-            continue
-        mv_estimate = equity_before * item.target_position if equity_before else 0
-        new_positions.append({
-            "symbol": item.symbol,
-            "weight_pct": item.target_position,
-            "market_value_estimate": mv_estimate,
-            "action_type": item.action_type,
-        })
-    # 若未执行订单，portfolio_after = portfolio_before
-    if not paper_results:
+    any_order_done = any(r.get("order_done") for r in paper_results) if paper_results else False
+    if paper_results:
+        total_trade_count = total_trade_count or sum(int(r.get("trade_count", 0)) for r in paper_results)
+        executed_orders_count = executed_orders_count or sum(1 for r in paper_results if r.get("order_done"))
+    any_fills = any_order_done or (total_trade_count > 0)
+
+    if not any_fills:
+        # 无成交：portfolio_after = portfolio_before，明确标注未变
         after_data = dict(portfolio_before)
         after_data["run_id"] = run_id
         after_data["_kind"] = "after"
+        after_data["source"] = "unchanged"
+        after_data["note"] = "execution produced no fills"
     else:
+        # 有成交：按 plan 推导 after，标注为 executed
+        new_positions: list[dict[str, Any]] = []
+        for item in rebalance_plan.items:
+            if item.target_position <= 0:
+                continue
+            mv_estimate = equity_before * item.target_position if equity_before else 0
+            new_positions.append({
+                "symbol": item.symbol,
+                "weight_pct": item.target_position,
+                "market_value_estimate": mv_estimate,
+                "action_type": item.action_type,
+            })
         after_data = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "positions": new_positions,
             "cash_estimate": equity_before * (1 - sum(p.get("weight_pct", 0) for p in new_positions)),
             "equity_estimate": equity_before,
             "run_id": run_id,
-            "source": "derived",
+            "source": "executed",
         }
     store.write_snapshot(run_id, "portfolio_after", after_data)
+
     if paper_results:
-        store.write_execution(run_id, {"results": paper_results})
+        store.write_execution(run_id, {
+            "results": paper_results,
+            "order_intents_count": order_intents_count,
+            "executed_orders_count": executed_orders_count,
+            "total_trade_count": total_trade_count,
+            "any_order_done": any_order_done,
+            "execution_status": execution_status,
+        })
     store.write_meta(run_id, (store.read_meta(run_id) or {}) | {"ended_at": datetime.now(timezone.utc).isoformat()})
 
 
@@ -656,6 +687,7 @@ def run_autonomous_paper_cycle(
         audit("approval_decision", {"decision": decision.decision, "reviewer": decision.reviewer})
 
         # 5) execute_if_approved
+        order_intents_count = len(filtered_order_intents)
         paper_results = execute_if_approved(
             run_id,
             decision,
@@ -667,10 +699,20 @@ def run_autonomous_paper_cycle(
             input_.execute_paper,
             store,
             paths,
+            order_intents_count=order_intents_count,
         )
         paths["portfolio_after"] = store.path_for_snapshot(run_id, "portfolio_after")
-        if paper_results:
-            audit("paper_execution_done", {"results_count": len(paper_results)})
+        executed_orders_count = sum(1 for r in (paper_results or []) if r.get("order_done"))
+        total_trade_count = sum(int(r.get("trade_count", 0)) for r in (paper_results or []))
+        any_order_done = any(r.get("order_done") for r in (paper_results or []))
+        execution_status = "executed" if (executed_orders_count > 0 or total_trade_count > 0) else "no_fills"
+        audit("paper_execution_done", {
+            "order_intents_count": order_intents_count,
+            "executed_orders_count": executed_orders_count,
+            "total_trade_count": total_trade_count,
+            "any_order_done": any_order_done,
+            "execution_status": execution_status,
+        })
 
         return CycleOutput(
             ok=True,
