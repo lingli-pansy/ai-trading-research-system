@@ -409,7 +409,7 @@ def _build_agent_context(
     store: RunStore,
     recent_n: int = 3,
 ) -> dict[str, Any]:
-    """构建 agent_context.json：portfolio_summary, risk_flags, proposal_summary, top_opportunities, recent_runs。"""
+    """构建 agent_context.json：approver 可直接决策的上下文，含 approval_focus、结构化 top_opportunities。"""
     equity = float(portfolio_before_dict.get("equity") or portfolio_before_dict.get("equity_estimate") or portfolio_before_dict.get("cash") or 0)
     cash = float(portfolio_before_dict.get("cash") or 0)
     positions_raw = portfolio_before_dict.get("positions") or []
@@ -426,9 +426,42 @@ def _build_agent_context(
         "exposure": dict(positions),
     }
     symbols_list = opportunity_ranking_data.get("symbols") or []
-    sorted_symbols = sorted(symbols_list, key=lambda s: float(s.get("research_score", 0)), reverse=True)
-    top_5 = sorted_symbols[:5]
-    top_opportunities = [f"{s['symbol']} score={s.get('research_score', 0)} {s.get('allocator_decision', 'skip')}" for s in top_5]
+    # selected 优先，再按 research_score 降序，最多 5 条；结构化字段供 approver 使用
+    sorted_symbols = sorted(
+        symbols_list,
+        key=lambda s: (not s.get("selected", False), -float(s.get("research_score", 0))),
+    )
+    top_opportunities = []
+    for s in sorted_symbols[:5]:
+        top_opportunities.append({
+            "symbol": s.get("symbol", ""),
+            "research_score": s.get("research_score", 0),
+            "allocator_decision": s.get("allocator_decision", "skip"),
+            "selected": s.get("selected", False),
+            "trigger_reason": s.get("trigger_reason") or "",
+        })
+    # approval_focus：仅被选中的 symbol，每条含 one_line_reason 便于审批
+    approval_focus: list[dict[str, Any]] = []
+    for s in symbols_list:
+        if not s.get("selected", False):
+            continue
+        sym = s.get("symbol", "")
+        score = s.get("research_score", 0)
+        alloc = s.get("allocator_decision", "skip")
+        trig = (s.get("trigger_reason") or "").strip() or "-"
+        parts = [f"score={score}"]
+        if alloc and alloc != "skip":
+            parts.append(f"{alloc} allocation")
+        if trig and trig != "-":
+            parts.append(f"trigger={trig}")
+        one_line_reason = " ".join(parts)
+        approval_focus.append({
+            "symbol": sym,
+            "score": score,
+            "allocator": alloc,
+            "trigger": trig,
+            "one_line_reason": one_line_reason,
+        })
     recent_runs = []
     for r in store.get_recent_runs(recent_n):
         recent_runs.append({
@@ -441,7 +474,7 @@ def _build_agent_context(
         "portfolio_summary": portfolio_summary,
         "risk_flags": list(risk_flags),
         "proposal_summary": list(proposal_summary),
-        "selection_reason": list(selection_reason),
+        "approval_focus": approval_focus,
         "top_opportunities": top_opportunities,
         "recent_runs": recent_runs,
     }

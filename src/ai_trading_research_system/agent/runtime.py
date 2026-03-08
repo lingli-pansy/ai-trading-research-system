@@ -138,18 +138,32 @@ class AutonomousTradingAgent:
             position_count = len([x for x in (rebalance_plan.get("items") or []) if (x.get("target_position") or 0) > 0])
         risk_flags = getattr(out, "risk_flags", None) or []
         approval_decision = getattr(out, "approval_decision", "") or ""
-        opportunity_ranking = store.read_artifact(run_id, "opportunity_ranking")
-        top_opportunities_lines: list[str] = []
-        if isinstance(opportunity_ranking, dict) and "symbols" in opportunity_ranking:
-            for s in opportunity_ranking["symbols"]:
-                sym = s.get("symbol", "")
-                score = s.get("research_score", 0)
-                dec = s.get("allocator_decision", "skip")
-                top_opportunities_lines.append(f"{sym} score={score} {dec}")
         agent_context = store.read_artifact(run_id, "agent_context")
         portfolio_summary_for_display: dict[str, Any] = {}
-        if isinstance(agent_context, dict) and "portfolio_summary" in agent_context:
+        approval_focus_lines: list[str] = []
+        top_opportunities_lines: list[str] = []
+        if isinstance(agent_context, dict):
             portfolio_summary_for_display = agent_context.get("portfolio_summary") or {}
+            for t in agent_context.get("top_opportunities") or []:
+                sym = t.get("symbol", "")
+                score = t.get("research_score", 0)
+                dec = t.get("allocator_decision", "skip")
+                sel = "selected" if t.get("selected") else ""
+                top_opportunities_lines.append(f"{sym} score={score} {dec} {sel}".strip())
+            if not top_opportunities_lines:
+                opportunity_ranking = store.read_artifact(run_id, "opportunity_ranking")
+                if isinstance(opportunity_ranking, dict) and "symbols" in opportunity_ranking:
+                    for s in opportunity_ranking["symbols"][:5]:
+                        sym = s.get("symbol", "")
+                        score = s.get("research_score", 0)
+                        dec = s.get("allocator_decision", "skip")
+                        top_opportunities_lines.append(f"{sym} score={score} {dec}")
+            for f in (agent_context.get("approval_focus") or [])[:3]:
+                sym = f.get("symbol", "")
+                score = f.get("score", 0)
+                alloc = f.get("allocator", "")
+                trig = f.get("trigger") or ""
+                approval_focus_lines.append(f"{sym} score={score} {alloc} trigger={trig}".strip())
 
         index_entry = RunIndexEntry(
             run_id=run_id,
@@ -194,6 +208,7 @@ class AutonomousTradingAgent:
             "approval_decision": approval_decision,
             "top_opportunities_lines": top_opportunities_lines,
             "portfolio_summary": portfolio_summary_for_display,
+            "approval_focus_lines": approval_focus_lines,
         }
 
     def run_loop(
@@ -266,6 +281,7 @@ def format_run_observability(summary: dict[str, Any]) -> str:
     risk_flags = summary.get("risk_flags") or []
     approval = summary.get("approval_decision", "") or "approve"
     top_opportunities = summary.get("top_opportunities_lines") or []
+    approval_focus = summary.get("approval_focus_lines") or []
     portfolio_summary = summary.get("portfolio_summary") or {}
     equity_ctx = portfolio_summary.get("equity") or before
     cash_ctx = portfolio_summary.get("cash")
@@ -278,6 +294,8 @@ def format_run_observability(summary: dict[str, Any]) -> str:
         portfolio_line,
         "TOP_OPPORTUNITIES",
         *(top_opportunities if top_opportunities else ["(no opportunity_ranking)"]),
+        "APPROVAL_FOCUS",
+        *(approval_focus[:3] if approval_focus else ["(none)"]),
         "PROPOSAL",
         *([str(x) for x in plan_lines] if plan_lines else ["(no plan)"]),
         "RISK FLAGS",

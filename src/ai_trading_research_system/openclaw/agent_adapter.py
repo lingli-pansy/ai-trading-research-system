@@ -115,6 +115,8 @@ def run_openclaw_agent_once(config: OpenClawAgentConfig) -> dict[str, Any]:
         "symbols": config.symbols,
         "approval_decision": summary.get("approval_decision", "") or "approve",
         "agent_context": agent_context,
+        "approval_focus": (agent_context or {}).get("approval_focus") or [],
+        "top_opportunities": (agent_context or {}).get("top_opportunities") or [],
     }
 
 
