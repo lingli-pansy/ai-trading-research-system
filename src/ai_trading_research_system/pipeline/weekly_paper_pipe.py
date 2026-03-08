@@ -14,6 +14,7 @@ from ai_trading_research_system.autonomous import (
     PortfolioAllocator,
     AutonomousExecutionStateMachine,
     AllocationResult,
+    default_policy,
 )
 from ai_trading_research_system.autonomous.schemas import WeeklyTradingMandate, AccountSnapshot
 from ai_trading_research_system.autonomous.opportunity_ranking import OpportunityRanking, OpportunityScore
@@ -78,6 +79,8 @@ def run_weekly_autonomous_paper(
     opportunity_ranking_week: list[dict[str, Any]] = []
     replacement_decisions_week: list[dict[str, Any]] = []
     retained_positions_week: list[dict[str, Any]] = []
+    rejected_opportunities_week: list[dict[str, Any]] = []
+    policy_summary_week: dict[str, Any] = {}
 
     spy_trend, vix_level = get_regime_context(use_mock)
     current_positions = {p.get("symbol"): p for p in (snapshot.positions or []) if p.get("symbol")}
@@ -116,11 +119,21 @@ def run_weekly_autonomous_paper(
                 "rationale": signal.rationale,
                 "score": o.score,
             })
-        alloc_result: AllocationResult = allocator.allocate(snapshot, mandate, signals, wait_confirmation=wait_any)
+        policy = default_policy()
+        alloc_result: AllocationResult = allocator.allocate(snapshot, mandate, signals, policy=policy, wait_confirmation=wait_any)
         opportunity_ranking_week = [{"symbol": o.symbol, "score": o.score, "confidence": o.confidence, "risk": o.risk} for o in ranked]
         replacement_decisions_week.extend(alloc_result.replacement_decisions)
-        retained = [t for t in alloc_result.target_positions if t.get("symbol") in current_positions]
-        retained_positions_week.extend(retained)
+        retained_positions_week.extend(alloc_result.retained_positions)
+        rejected_opportunities_week.extend(alloc_result.rejected_opportunities)
+        ps = alloc_result.policy_summary
+        prev = policy_summary_week
+        policy_summary_week = {
+            "score_gap_used": ps.get("score_gap_used") if ps.get("score_gap_used") is not None else prev.get("score_gap_used"),
+            "replacements_executed": prev.get("replacements_executed", 0) + ps.get("replacements_executed", 0),
+            "replacements_skipped_due_to_threshold": prev.get("replacements_skipped_due_to_threshold", 0) + ps.get("replacements_skipped_due_to_threshold", 0),
+            "replacements_skipped_due_to_budget": prev.get("replacements_skipped_due_to_budget", 0) + ps.get("replacements_skipped_due_to_budget", 0),
+            "rejected_due_to_threshold": prev.get("rejected_due_to_threshold", 0) + ps.get("rejected_due_to_threshold", 0),
+        }
 
         if alloc_result.no_trade:
             no_trade_reasons.append(alloc_result.no_trade_reason or "no_trade")
@@ -187,4 +200,6 @@ def run_weekly_autonomous_paper(
         opportunity_ranking=opportunity_ranking_week,
         replacement_decisions=replacement_decisions_week,
         retained_positions=retained_positions_week,
+        rejected_opportunities=rejected_opportunities_week,
+        policy_summary=policy_summary_week,
     )

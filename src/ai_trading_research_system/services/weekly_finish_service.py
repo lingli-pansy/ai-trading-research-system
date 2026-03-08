@@ -42,6 +42,8 @@ def finish_week(
     opportunity_ranking: list[dict[str, Any]] | None = None,
     replacement_decisions: list[dict[str, Any]] | None = None,
     retained_positions: list[dict[str, Any]] | None = None,
+    rejected_opportunities: list[dict[str, Any]] | None = None,
+    policy_summary: dict[str, Any] | None = None,
 ) -> Any:
     """
     After execution loop: compute benchmark, write report, build summary, return WeeklyPaperResult.
@@ -64,6 +66,10 @@ def finish_week(
         benchmark_source=benchmark_source,
     )
     report_dir = report_dir or Path(".")
+    policy_summary = policy_summary or {}
+    why_replacements = ""
+    if replacement_decisions:
+        why_replacements = f"因新机会分数差达到策略阈值，执行 {len(replacement_decisions)} 次仓位替换。"
     report_path = report_generate_and_write(
         mandate,
         bench_result,
@@ -76,14 +82,27 @@ def finish_week(
         turnover_pct=turnover_pct,
         opportunity_ranking=opportunity_ranking or [],
         replacement_decisions=replacement_decisions or [],
+        why_replacements_happened=why_replacements,
+        why_candidates_rejected=rejected_opportunities or [],
+        replacements_skipped_due_to_threshold=policy_summary.get("replacements_skipped_due_to_threshold", 0)
+        + policy_summary.get("rejected_due_to_threshold", 0),
+        replacements_skipped_due_to_budget=policy_summary.get("replacements_skipped_due_to_budget", 0),
     )
     period = f"day_0_to_{duration_days}"
+    experience_policy = {
+        "score_gap_used": policy_summary.get("score_gap_used"),
+        "replacements_executed": policy_summary.get("replacements_executed", 0),
+        "replacements_skipped": (policy_summary.get("replacements_skipped_due_to_threshold", 0)
+            + policy_summary.get("replacements_skipped_due_to_budget", 0)),
+        "rejected_due_to_threshold": policy_summary.get("rejected_due_to_threshold", 0),
+    }
     write_weekly_portfolio_experience(
         mandate_id=mandate.mandate_id,
         period=period,
         top_opportunity_scores=opportunity_ranking or [],
         replaced_positions=replacement_decisions or [],
         retained_positions=retained_positions or [],
+        policy_snapshot=experience_policy,
     )
     market_data_source = "mock" if use_mock else "yfinance"
     summary = build_weekly_result_summary(

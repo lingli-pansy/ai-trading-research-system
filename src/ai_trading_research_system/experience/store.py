@@ -71,9 +71,15 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             top_opportunity_scores TEXT,
             replaced_positions TEXT,
             retained_positions TEXT,
+            policy_snapshot TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
     """)
+    # Migration: add policy_snapshot if missing (existing DBs)
+    try:
+        conn.execute("ALTER TABLE weekly_portfolio_experience ADD COLUMN policy_snapshot TEXT")
+    except sqlite3.OperationalError:
+        pass
 
 
 def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
@@ -194,16 +200,17 @@ def write_weekly_portfolio_experience(
     top_opportunity_scores: list[dict[str, Any]] | None = None,
     replaced_positions: list[dict[str, Any]] | None = None,
     retained_positions: list[dict[str, Any]] | None = None,
+    policy_snapshot: dict[str, Any] | None = None,
     db_path: Path | None = None,
 ) -> int:
-    """Write one weekly_portfolio_experience row. Returns row id."""
+    """Write one weekly_portfolio_experience row. policy_snapshot: score_gap_used, replacements_executed, replacements_skipped, rejected_due_to_threshold. Returns row id."""
     conn = get_connection(db_path)
     try:
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO weekly_portfolio_experience (mandate_id, period, top_opportunity_scores, replaced_positions, retained_positions)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO weekly_portfolio_experience (mandate_id, period, top_opportunity_scores, replaced_positions, retained_positions, policy_snapshot)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 mandate_id,
@@ -211,6 +218,7 @@ def write_weekly_portfolio_experience(
                 json.dumps(top_opportunity_scores or [], ensure_ascii=False),
                 json.dumps(replaced_positions or [], ensure_ascii=False),
                 json.dumps(retained_positions or [], ensure_ascii=False),
+                json.dumps(policy_snapshot or {}, ensure_ascii=False),
             ),
         )
         conn.commit()

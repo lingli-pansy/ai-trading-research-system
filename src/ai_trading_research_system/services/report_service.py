@@ -26,6 +26,10 @@ def generate_and_write(
     turnover_pct: float = 0.0,
     opportunity_ranking: list[dict[str, Any]] | None = None,
     replacement_decisions: list[dict[str, Any]] | None = None,
+    why_replacements_happened: str = "",
+    why_candidates_rejected: list[dict[str, Any]] | None = None,
+    replacements_skipped_due_to_threshold: int = 0,
+    replacements_skipped_due_to_budget: int = 0,
 ) -> str:
     """Generate weekly report and write to report_dir/weekly_report_{mandate_id}.json. Returns path."""
     gen = WeeklyReportGenerator()
@@ -40,6 +44,10 @@ def generate_and_write(
         turnover_pct=turnover_pct,
         opportunity_ranking=opportunity_ranking or [],
         replacement_decisions=replacement_decisions or [],
+        why_replacements_happened=why_replacements_happened,
+        why_candidates_rejected=why_candidates_rejected or [],
+        replacements_skipped_due_to_threshold=replacements_skipped_due_to_threshold,
+        replacements_skipped_due_to_budget=replacements_skipped_due_to_budget,
     )
     report_dir = report_dir or Path(".")
     report_dir.mkdir(parents=True, exist_ok=True)

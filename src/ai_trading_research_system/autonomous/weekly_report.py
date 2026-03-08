@@ -30,6 +30,11 @@ class WeeklyReport:
     benchmark_source: str = "mock"
     opportunity_ranking: list[dict[str, Any]] = field(default_factory=list)
     replacement_decisions: list[dict[str, Any]] = field(default_factory=list)
+    # Policy-level explanation
+    why_replacements_happened: str = ""
+    why_candidates_rejected: list[dict[str, Any]] = field(default_factory=list)
+    replacements_skipped_due_to_threshold: int = 0
+    replacements_skipped_due_to_budget: int = 0
 
 
 class WeeklyReportGenerator:
@@ -48,6 +53,10 @@ class WeeklyReportGenerator:
         turnover_pct: float = 0.0,
         opportunity_ranking: list[dict[str, Any]] | None = None,
         replacement_decisions: list[dict[str, Any]] | None = None,
+        why_replacements_happened: str = "",
+        why_candidates_rejected: list[dict[str, Any]] | None = None,
+        replacements_skipped_due_to_threshold: int = 0,
+        replacements_skipped_due_to_budget: int = 0,
     ) -> WeeklyReport:
         key_trades = key_trades or []
         risk_events = risk_events or []
@@ -55,6 +64,7 @@ class WeeklyReportGenerator:
         daily_research = daily_research or []
         opportunity_ranking = opportunity_ranking or []
         replacement_decisions = replacement_decisions or []
+        why_candidates_rejected = why_candidates_rejected or []
         if benchmark_result.excess_return > 0.02:
             suggestion = "组合跑赢基准，可维持当前风险偏好。"
         elif benchmark_result.trade_count == 0:
@@ -79,6 +89,10 @@ class WeeklyReportGenerator:
             benchmark_source=getattr(benchmark_result, "benchmark_source", "mock"),
             opportunity_ranking=opportunity_ranking,
             replacement_decisions=replacement_decisions,
+            why_replacements_happened=why_replacements_happened,
+            why_candidates_rejected=why_candidates_rejected,
+            replacements_skipped_due_to_threshold=replacements_skipped_due_to_threshold,
+            replacements_skipped_due_to_budget=replacements_skipped_due_to_budget,
         )
 
     def to_dict(self, report: WeeklyReport) -> dict[str, Any]:

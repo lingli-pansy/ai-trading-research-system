@@ -11,6 +11,7 @@ from ai_trading_research_system.research.schemas import DecisionContract
 from ai_trading_research_system.autonomous.opportunity_ranking import OpportunityRanking, OpportunityScore
 from ai_trading_research_system.autonomous.allocator import PortfolioAllocator, AllocationResult
 from ai_trading_research_system.autonomous.schemas import AccountSnapshot, WeeklyTradingMandate
+from ai_trading_research_system.autonomous.portfolio_policy import PortfolioDecisionPolicy
 
 
 def _contract(symbol: str, confidence: str = "medium", thesis: str = "test", risk_flags: list | None = None, uncertainties: list | None = None) -> DecisionContract:
@@ -107,3 +108,124 @@ def test_portfolio_allocator_respects_ranking():
     out2 = allocator.allocate(snapshot, mandate, signals_weak_first, wait_confirmation=False)
     assert out2.target_positions[0]["symbol"] == "A"
     assert out2.target_positions[1]["symbol"] == "B"
+
+
+def test_replacement_requires_minimum_score_gap():
+    """Replacement is blocked when new opportunity score gap is below policy minimum."""
+    snapshot = AccountSnapshot(
+        cash=5000,
+        equity=10000,
+        positions=[
+            {"symbol": "OLD", "quantity": 10, "market_value": 5000},
+        ],
+        open_orders=[],
+        risk_budget=1000,
+        timestamp="2024-01-01T00:00:00",
+        source="mock",
+    )
+    mandate = WeeklyTradingMandate(mandate_id="m1", max_positions=1, watchlist=["OLD", "NEW"])
+    policy = PortfolioDecisionPolicy(minimum_score_gap_for_replacement=1.0, max_replacements_per_rebalance=2, turnover_budget=1.0)
+    allocator = PortfolioAllocator(max_position_pct=0.5)
+    # OLD has implicit score 0; NEW has 0.5 -> gap 0.5 < 1.0 -> no replacement
+    signals = [
+        {"symbol": "NEW", "size_fraction": 0.5, "rationale": "new", "score": 0.5},
+    ]
+    out = allocator.allocate(snapshot, mandate, signals, policy=policy, wait_confirmation=False)
+    assert len(out.target_positions) == 1
+    assert out.target_positions[0]["symbol"] == "OLD"
+    assert len(out.replacement_decisions) == 0
+    assert out.policy_summary.get("replacements_skipped_due_to_threshold", 0) >= 1 or len(out.rejected_opportunities) >= 1
+    # Gap 1.5 >= 1.0 -> replacement allowed
+    signals2 = [{"symbol": "NEW", "size_fraction": 0.5, "rationale": "new", "score": 1.5}]
+    out2 = allocator.allocate(snapshot, mandate, signals2, policy=policy, wait_confirmation=False)
+    assert len(out2.target_positions) == 1
+    assert out2.target_positions[0]["symbol"] == "NEW"
+    assert len(out2.replacement_decisions) == 1
+
+
+def test_max_replacements_per_rebalance():
+    """Allocator does not exceed max_replacements_per_rebalance."""
+    snapshot = AccountSnapshot(
+        cash=0,
+        equity=10000,
+        positions=[
+            {"symbol": "A", "quantity": 1, "market_value": 2500},
+            {"symbol": "B", "quantity": 1, "market_value": 2500},
+            {"symbol": "C", "quantity": 1, "market_value": 2500},
+        ],
+        open_orders=[],
+        risk_budget=1000,
+        timestamp="2024-01-01T00:00:00",
+        source="mock",
+    )
+    mandate = WeeklyTradingMandate(mandate_id="m1", max_positions=3, watchlist=["A", "B", "C", "X", "Y", "Z"])
+    policy = PortfolioDecisionPolicy(minimum_score_gap_for_replacement=0.0, max_replacements_per_rebalance=1, turnover_budget=1.0)
+    allocator = PortfolioAllocator(max_position_pct=0.25)
+    signals = [
+        {"symbol": "X", "size_fraction": 0.25, "rationale": "x", "score": 5.0},
+        {"symbol": "Y", "size_fraction": 0.25, "rationale": "y", "score": 4.0},
+        {"symbol": "Z", "size_fraction": 0.25, "rationale": "z", "score": 3.0},
+    ]
+    out = allocator.allocate(snapshot, mandate, signals, policy=policy, wait_confirmation=False)
+    assert len(out.replacement_decisions) <= 1
+    assert out.policy_summary.get("replacements_executed", 0) <= 1
+    assert out.policy_summary.get("replacements_skipped_due_to_budget", 0) >= 1 or len(out.rejected_opportunities) >= 1
+
+
+def test_rejected_opportunities_recorded():
+    """Rejected opportunities appear in rejected_opportunities with reason."""
+    snapshot = AccountSnapshot(
+        cash=5000,
+        equity=10000,
+        positions=[{"symbol": "OLD", "quantity": 10, "market_value": 5000}],
+        open_orders=[],
+        risk_budget=1000,
+        timestamp="2024-01-01T00:00:00",
+        source="mock",
+    )
+    mandate = WeeklyTradingMandate(mandate_id="m1", max_positions=1, watchlist=["OLD", "NEW"])
+    policy = PortfolioDecisionPolicy(minimum_score_gap_for_replacement=2.0, max_replacements_per_rebalance=1, turnover_budget=1.0)
+    allocator = PortfolioAllocator(max_position_pct=0.5)
+    signals = [{"symbol": "NEW", "size_fraction": 0.5, "rationale": "new", "score": 0.5}]
+    out = allocator.allocate(snapshot, mandate, signals, policy=policy, wait_confirmation=False)
+    assert len(out.rejected_opportunities) >= 1
+    r = out.rejected_opportunities[0]
+    assert "symbol" in r and "reason" in r
+    assert r["symbol"] == "NEW"
+    assert "below_required" in r["reason"] or "score_gap" in r["reason"]
+
+
+def test_allocator_policy_respects_current_holdings():
+    """Retained positions are current holdings that remain in target; policy affects only replacement."""
+    snapshot = AccountSnapshot(
+        cash=3000,
+        equity=10000,
+        positions=[
+            {"symbol": "KEEP", "quantity": 5, "market_value": 3500},
+            {"symbol": "OUT", "quantity": 5, "market_value": 3500},
+        ],
+        open_orders=[],
+        risk_budget=1000,
+        timestamp="2024-01-01T00:00:00",
+        source="mock",
+    )
+    mandate = WeeklyTradingMandate(mandate_id="m1", max_positions=2, watchlist=["KEEP", "OUT", "IN"])
+    policy = PortfolioDecisionPolicy(minimum_score_gap_for_replacement=0.2, max_replacements_per_rebalance=2, turnover_budget=1.0)
+    allocator = PortfolioAllocator(max_position_pct=0.35)
+    # KEEP 2.5, IN 2.8, OUT 0 (implicit). Top two by score: KEEP 2.5, IN 2.8. OUT dropped for IN (gap 2.8 > 0.2).
+    signals = [
+        {"symbol": "KEEP", "size_fraction": 0.35, "rationale": "keep", "score": 2.5},
+        {"symbol": "IN", "size_fraction": 0.35, "rationale": "in", "score": 2.8},
+        {"symbol": "OUT", "size_fraction": 0.3, "rationale": "out", "score": 0.0},
+    ]
+    out = allocator.allocate(snapshot, mandate, signals, policy=policy, wait_confirmation=False)
+    assert len(out.target_positions) == 2
+    symbols = {t["symbol"] for t in out.target_positions}
+    assert "KEEP" in symbols
+    assert "IN" in symbols
+    assert "OUT" not in symbols
+    retained_symbols = {p["symbol"] for p in out.retained_positions}
+    assert "KEEP" in retained_symbols
+    assert len(out.replacement_decisions) >= 1
+    for d in out.replacement_decisions:
+        assert d["symbol_out"] == "OUT" and d["symbol_in"] == "IN"
