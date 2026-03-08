@@ -154,3 +154,49 @@ RuntimeError: Reject mock: benchmark data from IB required. Check IB Gateway and
 在 `weekly-paper --symbols SPY --days 1` 且不 fallback mock 的配置下，**finish_week** 内对 benchmark 的调用使用 `lookback_days=1`，导致只拉取 1 日 bars（1 根 K 线），数据层要求至少 2 根 bar 才返回有效收益，因此返回空并触发 reject_mock 抛出异常，进而未生成周报、未写入 decision trace 与 experience store。  
 
 在实施上述**最小修复（仅数据获取层）**后，UC-09 可满足：IB 连接、snapshot_source=ibkr、benchmark 成功加载、周报生成、decision trace 与 experience store 写入。
+
+---
+
+## 7. 本次真实运行结果（UC-09 real mode 验收）
+
+**验收时间**: 2026-03-08  
+**提交**: 14c851b（IB snapshot/benchmark/reject_mock/并行 research/审计文档）
+
+### 7.1 运行一：`weekly-paper --symbols SPY --days 1`
+
+| 指标 | 值 |
+|------|-----|
+| IB connection latency | 2.41s |
+| account_summary latency | 0.33s |
+| positions latency | 0.00s |
+| open_orders latency | 0.00s |
+| account snapshot total | 0.34s |
+| regime context latency | 0.99s |
+| benchmark latency（管程内） | 0.44s / 0.00s / 0.51s |
+| snapshot_source | ibkr |
+| final status | exit 1，RuntimeError in finish_week |
+
+### 7.2 运行二：`weekly-paper --symbols SPY,QQQ,NVDA --days 1 --llm`
+
+| 指标 | 值 |
+|------|-----|
+| IB connection latency | 2.41s |
+| account_summary latency | 0.27s |
+| positions latency | 0.00s |
+| open_orders latency | 0.00s |
+| account snapshot total | 0.27s |
+| regime context latency | 0.89s |
+| benchmark latency（管程内） | 0.44s / 0.00s / 0.52s |
+| snapshot_source | ibkr |
+| final status | exit 1，RuntimeError in finish_week（同运行一） |
+
+### 7.3 Real mode gate 结论
+
+**是否通过 real mode gate？** **NO**
+
+两轮均在 `finish_week` 内 `get_benchmark_return(symbol=SPY, lookback_days=1, reject_mock=True)` 处抛出 `RuntimeError: Reject mock: benchmark data from IB required...`，未生成周报、未写 decision trace、未写 experience store。
+
+### 7.4 唯一阻塞点
+
+- **阻塞点**: `finish_week` 调用 `get_benchmark_return(lookback_days=duration_days)`，当 `--days 1` 时 `lookback_days=1`，`get_benchmark_series` 仅请求 1 日 bars，得到 1 根 K 线，不满足 `len(bars) >= 2`，返回空序列，`reject_mock=True` 导致 raise。
+- **最小修复所在函数**: `services/weekly_finish_service.finish_week`（调用处改为 `lookback_days=max(2, duration_days)`），或 `data/market_data_service.MarketDataService.get_benchmark_series`（请求 bars 时 `duration_days=max(2, lookback_days)`）。
