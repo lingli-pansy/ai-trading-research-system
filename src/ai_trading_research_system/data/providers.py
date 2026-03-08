@@ -1,5 +1,5 @@
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from .models import NewsItem, FundamentalSnapshot, PriceSnapshot
 
 
@@ -125,7 +125,7 @@ class YFinanceProvider:
             ticker = yf.Ticker(symbol)
             raw = getattr(ticker, "news", None) or []
             out: list[NewsItem] = []
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             for i, item in enumerate(raw[:10]):
                 if not isinstance(item, dict):
                     continue
@@ -134,7 +134,7 @@ class YFinanceProvider:
                 provider = item.get("publisher") or item.get("source") or "yfinance"
                 pub_ts = item.get("providerPublishTime") or item.get("published_at")
                 if isinstance(pub_ts, (int, float)):
-                    published_at = datetime.utcfromtimestamp(pub_ts)
+                    published_at = datetime.fromtimestamp(pub_ts, tz=timezone.utc)
                 else:
                     published_at = now - timedelta(hours=i)
                 out.append(
@@ -176,7 +176,7 @@ def _mock_fundamentals(symbol: str) -> FundamentalSnapshot:
 
 
 def _mock_news(symbol: str) -> list[NewsItem]:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     return [
         NewsItem(
             title=f"{symbol} announces stronger-than-expected enterprise demand",

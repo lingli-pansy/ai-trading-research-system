@@ -65,7 +65,7 @@
 - **Experience Log**：`runs/experience.jsonl`，由 `RunStore.append_experience` 追加；每 run 一条记录（run_id, timestamp, symbols, rebalance_plan, decision_summary, portfolio_before, portfolio_after），仅记录不学习。  
 - **CLI**：  
   - 单次：`python -m ai_trading_research_system.presentation.cli agent-run-once [--symbols NVDA,SPY] [--capital 10000]`  
-  - 循环：`python -m ai_trading_research_system.presentation.cli agent-loop --interval 300 [--symbols NVDA,SPY]`  
+  - 循环：`python -m ai_trading_research_system.presentation.cli agent-loop --interval 300 [--max-consecutive-failures 5] [--symbols NVDA,SPY]`（内部使用 run_loop，含错误守卫与健康停止）。  
 - **可观测输出**：每次 run 打印 RUN id、PLAN、RISK（turnover, position_count, flags）、EXECUTION、PORTFOLIO（value before → after）。
 
 ---

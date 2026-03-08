@@ -4,7 +4,7 @@ Used by run_for_openclaw.py and by OpenClaw persona/skills.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +31,7 @@ def format_result(task: str, result: Any, *, command_override: str | None = None
         return {
             "task": "research_symbol",
             "symbol": symbol,
-            "completed_at": datetime.utcnow().isoformat() + "Z",
+            "completed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "contract_action": contract.suggested_action,
             "contract_confidence": contract.confidence,
             "thesis_snippet": (contract.thesis or "")[:200],
@@ -48,7 +48,7 @@ def format_result(task: str, result: Any, *, command_override: str | None = None
         return {
             "task": "backtest_symbol",
             "symbol": symbol,
-            "completed_at": datetime.utcnow().isoformat() + "Z",
+            "completed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "contract_action": result.contract.suggested_action,
             "contract_confidence": result.contract.confidence,
             "thesis_snippet": (result.contract.thesis or "")[:200],
@@ -75,7 +75,7 @@ def format_result(task: str, result: Any, *, command_override: str | None = None
         return {
             "task": "run_demo",
             "symbol": symbol,
-            "completed_at": datetime.utcnow().isoformat() + "Z",
+            "completed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "engine_type": "nautilus",
             "used_nautilus": True,
             "status": status,

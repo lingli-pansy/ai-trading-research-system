@@ -1,17 +1,16 @@
 """
 Autonomous Trading Agent runtime: run_once + run_loop.
 Load portfolio → autonomous_paper_cycle → update run index & experience → return summary.
+run_loop 内 try/except 包裹 run_once，单次错误不终止 agent，记录并更新 health 后继续。
 """
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ai_trading_research_system.application.commands.run_autonomous_paper_cycle import (
-    run_autonomous_paper_cycle,
-)
 from ai_trading_research_system.agent.health import (
     get_health,
     update_health_success,
@@ -90,6 +89,10 @@ class AutonomousTradingAgent:
         3. 更新 run index 与 experience log
         4. 返回 run summary（含 run_id, rebalance_summary, orders, portfolio_before/after）
         """
+        from ai_trading_research_system.application.commands.run_autonomous_paper_cycle import (
+            run_autonomous_paper_cycle,
+        )
+
         store = self._store_ref()
         portfolio_state = store.get_latest_portfolio_state()
         last_meta = store.get_last_run()
@@ -165,13 +168,19 @@ class AutonomousTradingAgent:
         self,
         interval_seconds: float = 300.0,
         max_consecutive_failures: int = 5,
+        on_run_done: Callable[[dict[str, Any] | None, str | None], None] | None = None,
     ) -> None:
         """
         while True: try run_once(); on success update health; on exception record error, update health, continue.
         若连续失败超过 max_consecutive_failures 则停止 loop。
+        on_run_done(summary, error): 每轮结束后回调，成功时 error=None，异常时 summary=None。
         """
         store = self._store_ref()
+        summary: dict[str, Any] | None = None
+        error_message: str | None = None
         while True:
+            summary = None
+            error_message = None
             try:
                 summary = self.run_once()
                 if summary.get("ok"):
@@ -179,10 +188,15 @@ class AutonomousTradingAgent:
                 else:
                     update_health_error(store, summary.get("decision_summary") or "run_not_ok")
             except Exception as e:
-                update_health_error(store, str(e))
+                error_message = str(e)
+                update_health_error(store, error_message)
+            if on_run_done:
+                on_run_done(summary, error_message)
             health = get_health(store)
             if should_stop_loop(health, max_consecutive_failures=max_consecutive_failures):
                 mark_agent_stopped(store)
+                if on_run_done:
+                    on_run_done(None, "agent_stopped")
                 break
             time.sleep(interval_seconds)
 

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 from pydantic import BaseModel, Field
 
@@ -22,7 +22,7 @@ class StrategyParams(BaseModel):
 
 class DecisionContract(BaseModel):
     symbol: str
-    analysis_time: datetime = Field(default_factory=datetime.utcnow)
+    analysis_time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     thesis: str
     key_drivers: list[str] = Field(default_factory=list)

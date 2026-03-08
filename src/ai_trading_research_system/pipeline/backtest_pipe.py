@@ -57,10 +57,10 @@ def run(
 
 
 def _default_start() -> str:
-    from datetime import datetime, timedelta
-    return (datetime.utcnow() - timedelta(days=90)).strftime("%Y-%m-%d")
+    from datetime import datetime, timedelta, timezone
+    return (datetime.now(timezone.utc) - timedelta(days=90)).strftime("%Y-%m-%d")
 
 
 def _default_end() -> str:
-    from datetime import datetime
-    return datetime.utcnow().strftime("%Y-%m-%d")
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
