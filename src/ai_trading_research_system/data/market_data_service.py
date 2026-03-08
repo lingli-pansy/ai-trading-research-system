@@ -19,6 +19,13 @@ _BENCHMARK_CACHE: dict[tuple[str, int], tuple[float, tuple[list[float], float, f
 _BENCHMARK_CACHE_TTL_SEC = 300.0
 
 
+def clear_benchmark_cache(symbol: str, lookback_days: int) -> None:
+    """清除指定 key 的 benchmark 缓存，便于 real 模式在收尾时强制用当前 session 重新拉取。"""
+    key = (symbol, lookback_days)
+    if key in _BENCHMARK_CACHE:
+        del _BENCHMARK_CACHE[key]
+
+
 def _ib_configured() -> bool:
     return bool((os.environ.get("IBKR_HOST") or "").strip() and (os.environ.get("IBKR_PORT") or "").strip())
 
@@ -254,13 +261,19 @@ class MarketDataService:
             if now - ts <= _BENCHMARK_CACHE_TTL_SEC:
                 return cached
 
+        # 相对“最近 N 天”模式：不传具体 end_date，让 IB 用“当前”时间，避免时区/周末导致无数据
+        use_ib_now = not start_date and not end_date
         if not start_date or not end_date:
             end_dt = datetime.now(timezone.utc)
             start_dt = end_dt - timedelta(days=max(1, lookback_days))
             start_date = start_date or start_dt.strftime("%Y-%m-%d")
             end_date = end_date or end_dt.strftime("%Y-%m-%d")
 
-        bars = _ib_fetch_bars(symbol, duration_days=max(1, lookback_days), end_date=end_date or "")
+        bars = _ib_fetch_bars(
+            symbol,
+            duration_days=max(1, lookback_days),
+            end_date="" if use_ib_now else (end_date or ""),
+        )
         if not bars or len(bars) < 2:
             result = ([], 0.0, 0.0, 0.0)
             if use_cache:

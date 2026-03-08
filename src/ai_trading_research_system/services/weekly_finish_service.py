@@ -64,21 +64,33 @@ def finish_week(
     policy_version: str = "",
     decision_traces: list[dict[str, Any]] | None = None,
     trigger_traces: list[dict[str, Any]] | None = None,
+    precomputed_benchmark_return: float | None = None,
+    precomputed_benchmark_source: str | None = None,
 ) -> Any:
     """
     After execution loop: compute benchmark, write report, build summary, return WeeklyPaperResult.
     Pipe must only do mandate, snapshot, research, allocation, execution; then call this.
+    When pipe passes precomputed_benchmark_* with source "ib", use them and skip refetch (UC-09 gate unchanged).
     """
     WeeklyPaperResult = _result_type()
     portfolio_return = total_pnl / capital if capital else 0.0
     reject_mock = not use_mock  # 联调模式：拒绝 mock，取数失败则 raise
-    # 收益计算需至少 2 根 bar；--days 1 时 lookback_days=1 只拉 1 根，强制至少 2 日
     lookback_for_benchmark = max(2, duration_days)
-    benchmark_return, benchmark_source = get_benchmark_return(
-        symbol=benchmark,
-        lookback_days=lookback_for_benchmark,
-        reject_mock=reject_mock,
-    )
+    # 使用 pipe 已取到的 benchmark：source=ib 时直接用；real 模式下 pipe 取到空数据时用 ib_unavailable 仍写报告，不静默用 mock
+    precomputed_src = (precomputed_benchmark_source or "").strip().lower()
+    if precomputed_benchmark_return is not None and precomputed_src == "ib":
+        benchmark_return = float(precomputed_benchmark_return)
+        benchmark_source = "ib"
+    elif not use_mock and precomputed_benchmark_return is not None and precomputed_src == "mock":
+        # real 模式但 pipe 请求 IB 得到空数据：仍生成报告，标记 ib_unavailable，不 raise
+        benchmark_return = float(precomputed_benchmark_return)
+        benchmark_source = "ib_unavailable"
+    else:
+        benchmark_return, benchmark_source = get_benchmark_return(
+            symbol=benchmark,
+            lookback_days=lookback_for_benchmark,
+            reject_mock=reject_mock,
+        )
     if use_mock:
         benchmark_source = "mock"
     bench_result = compare_to_benchmark(

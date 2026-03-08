@@ -409,8 +409,18 @@ def run_weekly_autonomous_paper(
         sm.complete_week()
         report_dir = report_dir or Path(".")
         turnover_pct = min(100.0, 10.0 * total_trades) if total_trades else 0.0
+        lookback_week = max(duration_days, 2)
+        if not use_mock:
+            from ai_trading_research_system.data.market_data_service import clear_benchmark_cache
+            clear_benchmark_cache(benchmark, lookback_week)
         spy_returns_week, benchmark_return_week, vol_week, max_dd_week = get_benchmark_returns_and_volatility(
-            symbol=benchmark, lookback_days=max(duration_days, 2)
+            symbol=benchmark, lookback_days=lookback_week
+        )
+        # 同一次请求的 (return, source) 传给 finish_week，避免 finish_week 再次请求时失败（real 模式 IB 只取一次）
+        _bench_ret, _bench_src = get_benchmark_return(
+            symbol=benchmark,
+            lookback_days=lookback_week,
+            reject_mock=False,
         )
         n_week = min(len(portfolio_returns_list), len(spy_returns_week))
         portfolio_returns_week = portfolio_returns_list[-n_week:] if n_week else []
@@ -459,6 +469,8 @@ def run_weekly_autonomous_paper(
             policy_version=policy_version or "",
             decision_traces=decision_traces_week,
             trigger_traces=trigger_traces_week,
+            precomputed_benchmark_return=_bench_ret,
+            precomputed_benchmark_source=_bench_src,
         )
         _progress("Done.")
         return result
