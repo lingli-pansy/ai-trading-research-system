@@ -142,6 +142,8 @@ class AutonomousTradingAgent:
         portfolio_summary_for_display: dict[str, Any] = {}
         approval_focus_lines: list[str] = []
         top_opportunities_lines: list[str] = []
+        recommendation = "defer"
+        recommendation_reasons: list[str] = []
         if isinstance(agent_context, dict):
             portfolio_summary_for_display = agent_context.get("portfolio_summary") or {}
             for t in agent_context.get("top_opportunities") or []:
@@ -164,6 +166,8 @@ class AutonomousTradingAgent:
                 alloc = f.get("allocator", "")
                 trig = f.get("trigger") or ""
                 approval_focus_lines.append(f"{sym} score={score} {alloc} trigger={trig}".strip())
+            recommendation = agent_context.get("recommendation") or "defer"
+            recommendation_reasons = agent_context.get("recommendation_reasons") or []
 
         index_entry = RunIndexEntry(
             run_id=run_id,
@@ -209,6 +213,8 @@ class AutonomousTradingAgent:
             "top_opportunities_lines": top_opportunities_lines,
             "portfolio_summary": portfolio_summary_for_display,
             "approval_focus_lines": approval_focus_lines,
+            "recommendation": recommendation,
+            "recommendation_reasons": recommendation_reasons,
         }
 
     def run_loop(
@@ -296,6 +302,9 @@ def format_run_observability(summary: dict[str, Any]) -> str:
         *(top_opportunities if top_opportunities else ["(no opportunity_ranking)"]),
         "APPROVAL_FOCUS",
         *(approval_focus[:3] if approval_focus else ["(none)"]),
+        "RECOMMENDATION",
+        (summary.get("recommendation") or "defer").lower(),
+        *([f"- {r}" for r in (summary.get("recommendation_reasons") or [])[:3]]),
         "PROPOSAL",
         *([str(x) for x in plan_lines] if plan_lines else ["(no plan)"]),
         "RISK FLAGS",

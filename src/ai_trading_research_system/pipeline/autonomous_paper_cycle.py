@@ -480,6 +480,64 @@ def _build_agent_context(
     }
 
 
+def _build_approval_recommendation(
+    agent_context: dict[str, Any],
+    risk_flags: list[str],
+) -> dict[str, Any]:
+    """
+    基于 agent_context 与 risk_flags 生成 runtime 审批建议（approve | reject | defer）。
+    不引入新模型，逻辑透明可解释。
+    """
+    run_id = agent_context.get("run_id", "")
+    proposal_summary = agent_context.get("proposal_summary") or []
+    approval_focus = agent_context.get("approval_focus") or []
+    top_opportunities = agent_context.get("top_opportunities") or []
+    selected_symbols = [f.get("symbol", "") for f in approval_focus if f.get("symbol")]
+
+    # 是否有实质 proposal（非空且非仅 no_trade）
+    has_proposal = bool(proposal_summary) and not all(
+        "no_trade" in (line or "").lower() for line in proposal_summary
+    )
+    has_risk = bool(risk_flags)
+    has_focus = bool(approval_focus)
+    selected_count = sum(1 for t in top_opportunities if t.get("selected"))
+
+    recommendation: str = "defer"
+    confidence: str = "low"
+    reasons: list[str] = []
+
+    if not has_proposal:
+        recommendation = "reject"
+        confidence = "low"
+        reasons = ["no proposal or no trade"]
+    elif has_risk:
+        recommendation = "defer"
+        confidence = "medium"
+        reasons = ["risk flags present"] + list(risk_flags)[:3]
+    elif has_proposal and not has_focus:
+        recommendation = "defer"
+        confidence = "low"
+        reasons = ["proposal present but no approval_focus (selection reason missing)"]
+    else:
+        recommendation = "approve"
+        confidence = "high"
+        if selected_count:
+            reasons.append(f"selected symbols exist ({selected_count})")
+        reasons.append("no risk flags")
+        if has_focus:
+            reasons.append("approval_focus available")
+
+    return {
+        "run_id": run_id,
+        "recommendation": recommendation,
+        "confidence": confidence,
+        "reasons": reasons,
+        "selected_symbols": list(selected_symbols),
+        "blocked_symbols": [],
+        "risk_flags": list(risk_flags),
+    }
+
+
 def _build_proposal(
     run_id: str,
     filtered_plan: RebalancePlan,
@@ -841,6 +899,11 @@ def run_autonomous_paper_cycle(
             store,
             recent_n=3,
         )
+        approval_rec = _build_approval_recommendation(agent_context, check_result.risk_flags)
+        store.write_artifact(run_id, "approval_recommendation", approval_rec)
+        paths["approval_recommendation"] = store.path_for_artifact(run_id, "approval_recommendation")
+        agent_context["recommendation"] = approval_rec["recommendation"]
+        agent_context["recommendation_reasons"] = approval_rec["reasons"]
         store.write_artifact(run_id, "agent_context", agent_context)
         paths["agent_context"] = store.path_for_artifact(run_id, "agent_context")
 
