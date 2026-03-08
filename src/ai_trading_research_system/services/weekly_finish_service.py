@@ -102,6 +102,10 @@ def finish_week(
     proposed_evolution = proposal.to_dict()
     approved_evolution = decision.to_dict()
     rejected_evolution = list(decision.rejected_adjustments)
+    evolution_guardrail_summary = {
+        "guardrail_result": getattr(decision, "guardrail_result", "passed"),
+        "guardrail_reason": getattr(decision, "guardrail_reason", ""),
+    }
     period = f"day_0_to_{duration_days}"
     write_evolution_proposal_snapshot(mandate_id=mandate.mandate_id, period=period, proposal=proposed_evolution)
     write_evolution_decision_snapshot(mandate_id=mandate.mandate_id, period=period, decision=approved_evolution)
@@ -157,6 +161,7 @@ def finish_week(
         policy_version=policy_version or "",
         system_snapshot_at_week_end=system_snapshot_at_week_end,
         decision_traces_summary=decision_traces_summary,
+        evolution_guardrail_summary=evolution_guardrail_summary,
     )
     if portfolio_health:
         write_portfolio_health_snapshot(mandate_id=mandate.mandate_id, period=period, snapshot=portfolio_health)
