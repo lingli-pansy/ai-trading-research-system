@@ -13,7 +13,12 @@ from ai_trading_research_system.services.report_service import (
     generate_and_write as report_generate_and_write,
     build_weekly_result_summary,
 )
-from ai_trading_research_system.experience.store import write_weekly_portfolio_experience, write_portfolio_health_snapshot
+from ai_trading_research_system.experience.store import (
+    write_weekly_portfolio_experience,
+    write_portfolio_health_snapshot,
+    write_experience_insight_snapshot,
+)
+from ai_trading_research_system.experience.analyzer import analyze_experience_from_store
 
 # Avoid circular import: pipe defines WeeklyPaperResult
 def _result_type():
@@ -70,6 +75,14 @@ def finish_week(
     )
     report_dir = report_dir or Path(".")
     policy_summary = policy_summary or {}
+    # Experience-driven insights（基于历史周数据，不含本周）
+    insights = analyze_experience_from_store(mandate_id=mandate.mandate_id, limit_weeks=30)
+    experience_insights_report = {
+        "summary": "本周表现与历史经验对比："
+        + ("建议根据下方洞察微调策略或政策。" if insights.strategy_adjustment_suggested else "未触发策略调整建议。"),
+        "strategy_adjustment_suggested": insights.strategy_adjustment_suggested,
+        "insights": insights.to_dict(),
+    }
     why_replacements = ""
     if replacement_decisions:
         why_replacements = f"因新机会分数差达到策略阈值，执行 {len(replacement_decisions)} 次仓位替换。"
@@ -93,6 +106,7 @@ def finish_week(
         intraday_adjustments=intraday_adjustments or [],
         portfolio_health=portfolio_health or {},
         health_based_adjustments=health_based_adjustments or [],
+        experience_insights=experience_insights_report,
     )
     period = f"day_0_to_{duration_days}"
     if portfolio_health:
@@ -104,6 +118,7 @@ def finish_week(
         "replacements_skipped": (policy_summary.get("replacements_skipped_due_to_threshold", 0)
             + policy_summary.get("replacements_skipped_due_to_budget", 0)),
         "rejected_due_to_threshold": policy_summary.get("rejected_due_to_threshold", 0),
+        "excess_return": bench_result.excess_return,
     }
     if policy_obj is not None:
         experience_policy["minimum_score_gap_for_replacement"] = policy_obj.minimum_score_gap_for_replacement
@@ -122,6 +137,11 @@ def finish_week(
         retained_positions=retained_positions or [],
         policy_snapshot=experience_policy,
         health_adjustment_summary=health_adj_summary,
+    )
+    write_experience_insight_snapshot(
+        mandate_id=mandate.mandate_id,
+        period=period,
+        insights=insights.to_dict(),
     )
     market_data_source = "mock" if use_mock else "yfinance"
     summary = build_weekly_result_summary(

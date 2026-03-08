@@ -102,6 +102,13 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             health_snapshot_excerpt TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
+        CREATE TABLE IF NOT EXISTS experience_insight_snapshot (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mandate_id TEXT NOT NULL,
+            period TEXT NOT NULL,
+            insights_json TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
     """)
     # Migration: add policy_snapshot if missing (existing DBs)
     try:
@@ -141,6 +148,30 @@ def write_intraday_trigger_event(
                 severity,
                 json.dumps(positions_changed or [], ensure_ascii=False),
             ),
+        )
+        conn.commit()
+        return cur.lastrowid or 0
+    finally:
+        conn.close()
+
+
+def write_experience_insight_snapshot(
+    mandate_id: str,
+    period: str,
+    insights: dict[str, Any],
+    *,
+    db_path: Path | None = None,
+) -> int:
+    """Write one experience_insight_snapshot row for long-term experiment analysis. Returns row id."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO experience_insight_snapshot (mandate_id, period, insights_json)
+            VALUES (?, ?, ?)
+            """,
+            (mandate_id, period, json.dumps(insights, ensure_ascii=False)),
         )
         conn.commit()
         return cur.lastrowid or 0
@@ -202,6 +233,101 @@ def write_portfolio_health_snapshot(
         )
         conn.commit()
         return cur.lastrowid or 0
+    finally:
+        conn.close()
+
+
+def read_weekly_portfolio_experience_history(
+    limit: int = 50,
+    mandate_id: str | None = None,
+    db_path: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Read recent weekly_portfolio_experience rows for analysis. Returns list of dicts with parsed JSON fields."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        if mandate_id:
+            cur.execute(
+                """
+                SELECT id, mandate_id, period, top_opportunity_scores, replaced_positions, retained_positions, policy_snapshot, health_adjustment_summary, created_at
+                FROM weekly_portfolio_experience WHERE mandate_id = ? ORDER BY id DESC LIMIT ?
+                """,
+                (mandate_id, limit),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT id, mandate_id, period, top_opportunity_scores, replaced_positions, retained_positions, policy_snapshot, health_adjustment_summary, created_at
+                FROM weekly_portfolio_experience ORDER BY id DESC LIMIT ?
+                """,
+                (limit,),
+            )
+        rows = cur.fetchall()
+        out = []
+        for row in rows:
+            (id_, mandate_id_, period, top_scores, replaced, retained, policy_snap, health_adj, created_at) = row
+            out.append({
+                "id": id_,
+                "mandate_id": mandate_id_,
+                "period": period,
+                "top_opportunity_scores": _parse_json(top_scores),
+                "replaced_positions": _parse_json(replaced),
+                "retained_positions": _parse_json(retained),
+                "policy_snapshot": _parse_json(policy_snap),
+                "health_adjustment_summary": _parse_json(health_adj),
+                "created_at": created_at,
+            })
+        return out
+    finally:
+        conn.close()
+
+
+def _parse_json(raw: Any) -> Any:
+    if raw is None:
+        return None
+    if isinstance(raw, (dict, list)):
+        return raw
+    try:
+        return json.loads(raw) if raw else None
+    except Exception:
+        return raw
+
+
+def read_health_trigger_events(
+    limit: int = 200,
+    mandate_id: str | None = None,
+    db_path: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Read recent health_trigger_events for analysis."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        if mandate_id:
+            cur.execute(
+                """SELECT id, mandate_id, period, trigger_type, trigger_reason, severity, health_snapshot_excerpt, created_at
+                   FROM health_trigger_events WHERE mandate_id = ? ORDER BY id DESC LIMIT ?""",
+                (mandate_id, limit),
+            )
+        else:
+            cur.execute(
+                """SELECT id, mandate_id, period, trigger_type, trigger_reason, severity, health_snapshot_excerpt, created_at
+                   FROM health_trigger_events ORDER BY id DESC LIMIT ?""",
+                (limit,),
+            )
+        rows = cur.fetchall()
+        return [
+            {
+                "id": r[0],
+                "mandate_id": r[1],
+                "period": r[2],
+                "trigger_type": r[3],
+                "trigger_reason": r[4],
+                "severity": r[5],
+                "health_snapshot_excerpt": _parse_json(r[6]),
+                "created_at": r[7],
+            }
+            for r in rows
+        ]
     finally:
         conn.close()
 

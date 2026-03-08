@@ -39,6 +39,7 @@ class WeeklyReport:
     intraday_adjustments: list[dict[str, Any]] = field(default_factory=list)  # trigger_type, positions_changed, rationale
     portfolio_health: dict[str, Any] = field(default_factory=dict)  # portfolio_health_snapshot
     health_based_adjustments: list[dict[str, Any]] = field(default_factory=list)  # 因健康监控触发的调整，便于区分
+    experience_insights: dict[str, Any] = field(default_factory=dict)  # 本周表现与历史经验对比、是否触发策略调整建议
 
 
 class WeeklyReportGenerator:
@@ -65,6 +66,7 @@ class WeeklyReportGenerator:
         intraday_adjustments: list[dict[str, Any]] | None = None,
         portfolio_health: dict[str, Any] | None = None,
         health_based_adjustments: list[dict[str, Any]] | None = None,
+        experience_insights: dict[str, Any] | None = None,
     ) -> WeeklyReport:
         key_trades = key_trades or []
         risk_events = risk_events or []
@@ -84,6 +86,7 @@ class WeeklyReportGenerator:
         intraday_adjustments = intraday_adjustments or []
         portfolio_health = portfolio_health or {}
         health_based_adjustments = health_based_adjustments or []
+        experience_insights = experience_insights or {}
         if benchmark_result.excess_return > 0.02:
             suggestion = "组合跑赢基准，可维持当前风险偏好。"
         elif benchmark_result.trade_count == 0:
@@ -116,6 +119,7 @@ class WeeklyReportGenerator:
             intraday_adjustments=intraday_adjustments,
             portfolio_health=portfolio_health,
             health_based_adjustments=health_based_adjustments,
+            experience_insights=experience_insights,
         )
 
     def to_dict(self, report: WeeklyReport) -> dict[str, Any]:
