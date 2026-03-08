@@ -25,6 +25,20 @@ CLI、OpenClaw、E2E 消费的执行结果字段对齐。backtest / paper / demo
 
 ---
 
+## UC-09 周报输出（weekly-paper）
+
+| 字段 | 说明 |
+|------|------|
+| ok | 是否成功 |
+| mandate_id | 本次 mandate 标识 |
+| status | 状态（如 completed_week） |
+| capital_limit, benchmark | 资本与基准 |
+| engine_type, used_nautilus | 执行引擎 |
+| report_path | 周报 JSON 文件路径 |
+| summary | portfolio_return, benchmark_return, excess_return, trade_count, pnl |
+
+---
+
 ## 参考
 
 - 实现：`src/ai_trading_research_system/pipeline/result_schema.py`

@@ -17,6 +17,7 @@ catalog/
 *.parquet
 .nautilus/
 .reports/
+reports/
 .experience/
 .backtest_catalog/
 .paper_stop

@@ -173,3 +173,39 @@ def run_demo_report(
             "sentence": f"结论: {contract.suggested_action}（置信度 {contract.confidence}），策略信号 {signal.action}，回测 {result.metrics.trade_count} 笔，pnl={result.metrics.pnl:.2f}。",
         },
     }
+
+
+def run_weekly_paper_report(
+    *,
+    capital: float = 10_000.0,
+    benchmark: str = "SPY",
+    duration_days: int = 5,
+    auto_confirm: bool = True,
+    use_mock: bool = True,
+    use_llm: bool = False,
+) -> dict[str, Any]:
+    """UC-09: Weekly autonomous paper. Returns JSON for OpenClaw (ok, mandate_id, status, report_path, summary)."""
+    from ai_trading_research_system.pipeline.weekly_paper_pipe import run_weekly_autonomous_paper
+    from pathlib import Path
+    report_dir = Path.cwd() / "reports"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    result = run_weekly_autonomous_paper(
+        capital=capital,
+        benchmark=benchmark,
+        duration_days=duration_days,
+        auto_confirm=auto_confirm,
+        use_mock=use_mock,
+        use_llm=use_llm,
+        report_dir=report_dir,
+    )
+    return {
+        "ok": result.ok,
+        "mandate_id": result.mandate_id,
+        "status": result.status,
+        "capital_limit": result.capital_limit,
+        "benchmark": result.benchmark,
+        "engine_type": result.engine_type,
+        "used_nautilus": result.used_nautilus,
+        "report_path": result.report_path,
+        "summary": result.summary,
+    }

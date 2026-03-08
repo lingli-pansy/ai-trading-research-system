@@ -6,7 +6,9 @@
 
 ## 入口
 
-- **CLI**：`python cli.py research|backtest|demo|paper [SYMBOL] [--mock] [--llm]`
+- **CLI**：`python cli.py research|backtest|demo|paper|weekly-paper [SYMBOL] [--mock] [--llm]`
+- **weekly-paper (UC-09)**：`python cli.py weekly-paper [--capital 10000] [--benchmark SPY] [--days 5] [--mock]`；或 `python scripts/run_weekly_autonomous_paper.py --capital 10000 --benchmark SPY`。stdout 仅 JSON：ok, mandate_id, status, capital_limit, benchmark, engine_type, used_nautilus, report_path, summary。
+- **OpenClaw command**：`weekly_autonomous_paper`；args: capital, benchmark, duration_days, auto_confirm。Skill 可调用 `execute(RoutedCommand("weekly_autonomous_paper", ...))` 或上述 CLI。
 - **run_for_openclaw**：`python scripts/run_for_openclaw.py research|backtest|demo [SYMBOL] [--mock]`，stdout 单条 JSON。
 
 ---

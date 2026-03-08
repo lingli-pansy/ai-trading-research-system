@@ -11,13 +11,17 @@ from typing import Any
 @dataclass
 class RoutedCommand:
     """Internal command after routing; same as cli subcommand + args."""
-    subcommand: str  # "research" | "backtest" | "paper" | "demo"
+    subcommand: str  # "research" | "backtest" | "paper" | "demo" | "weekly_autonomous_paper"
     symbol: str = "NVDA"
     start_date: str | None = None
     end_date: str | None = None
     once: bool = False
     use_mock: bool = False
     use_llm: bool = False
+    capital: float = 10_000.0
+    benchmark: str = "SPY"
+    duration_days: int = 5
+    auto_confirm: bool = True
 
     def to_kwargs(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -32,6 +36,11 @@ class RoutedCommand:
                 out["end_date"] = self.end_date
         if self.subcommand == "paper":
             out["once"] = self.once
+        if self.subcommand == "weekly_autonomous_paper":
+            out["capital"] = self.capital
+            out["benchmark"] = self.benchmark
+            out["duration_days"] = self.duration_days
+            out["auto_confirm"] = self.auto_confirm
         return out
 
 
@@ -66,6 +75,17 @@ def route_intent(
         return RoutedCommand("paper", symbol=symbol, once=True, use_mock=use_mock, use_llm=use_llm)
     if "demo" in intent_lower or "e2e" in intent_lower:
         return RoutedCommand("demo", symbol=symbol, use_mock=use_mock, use_llm=use_llm)
+    if "weekly" in intent_lower or "autonomous" in intent_lower and "paper" in intent_lower:
+        return RoutedCommand(
+            "weekly_autonomous_paper",
+            symbol=symbol,
+            use_mock=use_mock,
+            use_llm=use_llm,
+            capital=10_000.0,
+            benchmark="SPY",
+            duration_days=5,
+            auto_confirm=True,
+        )
     if "experience" in intent_lower or "经验" in intent_lower or "show" in intent_lower and "history" in intent_lower:
         # Placeholder: no subcommand yet for experience query; map to research for now
         return RoutedCommand("research", symbol=symbol, use_mock=use_mock, use_llm=use_llm)

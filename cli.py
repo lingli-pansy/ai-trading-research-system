@@ -187,9 +187,44 @@ def cmd_demo(symbol: str, mock: bool, llm: bool) -> int:
     return 0
 
 
+def cmd_weekly_paper(
+    capital: float,
+    benchmark: str,
+    days: int,
+    auto_confirm: bool,
+    mock: bool,
+    llm: bool,
+) -> int:
+    """UC-09: Weekly autonomous paper. Stdout=JSON only for machine consumption."""
+    from ai_trading_research_system.pipeline.weekly_paper_pipe import run_weekly_autonomous_paper
+    (PROJECT_ROOT / "reports").mkdir(parents=True, exist_ok=True)
+    result = run_weekly_autonomous_paper(
+        capital=capital,
+        benchmark=benchmark,
+        duration_days=days,
+        auto_confirm=auto_confirm,
+        use_mock=mock,
+        use_llm=llm,
+        report_dir=PROJECT_ROOT / "reports",
+    )
+    out = {
+        "ok": result.ok,
+        "mandate_id": result.mandate_id,
+        "status": result.status,
+        "capital_limit": result.capital_limit,
+        "benchmark": result.benchmark,
+        "engine_type": result.engine_type,
+        "used_nautilus": result.used_nautilus,
+        "report_path": result.report_path,
+        "summary": result.summary,
+    }
+    print(json.dumps(out, indent=2, default=_json_serial))
+    return 0 if result.ok else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="AI Trading Research System — unified CLI (research / backtest / paper / demo)"
+        description="AI Trading Research System — unified CLI (research / backtest / paper / demo / weekly-paper)"
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -225,6 +260,16 @@ def main() -> int:
     p_demo.add_argument("symbol", nargs="?", default="NVDA", help="Symbol (default: NVDA)")
     _add_common(p_demo)
     p_demo.set_defaults(func=lambda ns: cmd_demo(ns.symbol, ns.mock, ns.llm))
+
+    # weekly-paper (UC-09)
+    p_weekly = subparsers.add_parser("weekly-paper", help="UC-09: Weekly autonomous paper portfolio")
+    p_weekly.add_argument("--capital", type=float, default=10000, help="Capital limit (default 10000)")
+    p_weekly.add_argument("--benchmark", default="SPY", help="Benchmark symbol (default SPY)")
+    p_weekly.add_argument("--days", type=int, default=5, help="Trading days (default 5)")
+    p_weekly.add_argument("--auto-confirm", action="store_true", default=True, help="Auto confirm trades (default True)")
+    p_weekly.add_argument("--no-auto-confirm", action="store_false", dest="auto_confirm", help="Disable auto confirm")
+    _add_common(p_weekly)
+    p_weekly.set_defaults(func=lambda ns: cmd_weekly_paper(ns.capital, ns.benchmark, ns.days, ns.auto_confirm, ns.mock, ns.llm))
 
     args = parser.parse_args()
     return args.func(args)

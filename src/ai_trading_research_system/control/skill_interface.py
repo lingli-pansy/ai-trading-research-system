@@ -15,6 +15,7 @@ from ai_trading_research_system.pipeline.openclaw_adapter import (
     run_research_report,
     run_backtest_report,
     run_demo_report,
+    run_weekly_paper_report,
 )
 
 
@@ -48,7 +49,6 @@ def execute(
         if subcommand == "demo":
             return run_demo_report(symbol, use_mock=use_mock, use_llm=use_llm)
         if subcommand == "paper":
-            # Paper does not have a report in openclaw_adapter; return minimal status
             from ai_trading_research_system.pipeline.paper_pipe import run
             res = run(symbol, use_mock=use_mock, use_llm=use_llm)
             return {
@@ -59,6 +59,15 @@ def execute(
                 "signal_action": res.signal.action,
                 "allowed_position_size": res.signal.allowed_position_size,
             }
+        if subcommand == "weekly_autonomous_paper":
+            return run_weekly_paper_report(
+                capital=kwargs.get("capital", 10_000.0),
+                benchmark=kwargs.get("benchmark", "SPY"),
+                duration_days=kwargs.get("duration_days", 5),
+                auto_confirm=kwargs.get("auto_confirm", True),
+                use_mock=use_mock,
+                use_llm=use_llm,
+            )
         return {"error": f"unknown subcommand: {subcommand}"}
 
     # Invoke CLI via subprocess and return stdout (project root = .../src/.../control -> parents[3])
