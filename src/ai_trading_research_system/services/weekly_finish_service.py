@@ -129,16 +129,36 @@ def finish_week(
         why_replacements = f"因新机会分数差达到策略阈值，执行 {len(replacement_decisions)} 次仓位替换。"
     decision_traces = decision_traces or []
     trigger_traces = trigger_traces or []
-    traces_replace = [t for t in decision_traces if t.get("final_action") == "replace"]
+    portfolio_traces = [t for t in decision_traces if t.get("trace_type") == "portfolio"]
+    symbol_traces = [t for t in decision_traces if t.get("trace_type") == "symbol"]
+    if not portfolio_traces and not symbol_traces:
+        portfolio_traces = [t for t in decision_traces if not t.get("symbol")]
+        symbol_traces = [t for t in decision_traces if t.get("symbol")]
+    traces_replace = [t for t in symbol_traces if t.get("final_action") == "replace"]
     decision_traces_summary = {
         "summary": why_replacements or "本周无调仓或调仓因政策/健康约束未执行。",
-        "why_major_reallocations": "主要调仓源于机会分数差超过策略阈值、且未超过 turnover 与替换次数上限；详见 traces 与 trigger_traces。" if traces_replace else "无替换类决策。",
+        "why_major_reallocations": "主要调仓源于机会分数差超过策略阈值、且未超过 turnover 与替换次数上限；详见 portfolio_traces / symbol_traces 与 trigger_traces。" if traces_replace else "无替换类决策。",
+        "portfolio_traces": portfolio_traces,
+        "symbol_traces": symbol_traces,
         "traces": decision_traces,
         "trigger_traces": trigger_traces,
     }
     seen_sym: set[str] = set()
     research_per_symbol: list[dict[str, Any]] = []
+    for t in symbol_traces:
+        sym = t.get("symbol", "")
+        if not sym or sym in seen_sym:
+            continue
+        seen_sym.add(sym)
+        research_per_symbol.append({
+            "symbol": sym,
+            "research_thesis": t.get("research_thesis", ""),
+            "research_key_drivers": t.get("key_drivers", t.get("research_key_drivers", [])) or [],
+            "research_risk_factors": t.get("risk_factors", t.get("research_risk_factors", [])) or [],
+        })
     for t in decision_traces:
+        if t.get("trace_type") == "symbol":
+            continue
         sym = t.get("symbol", "")
         if not sym or sym in seen_sym:
             continue

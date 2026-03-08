@@ -42,7 +42,8 @@ def _thesis_strength(contract: DecisionContract) -> float:
     return min(1.0, len(t) / 200.0)
 
 
-def _score(contract: DecisionContract) -> float:
+def _score_raw(contract: DecisionContract) -> float:
+    """Raw score (confidence + thesis strength - risk penalty), ~1 to 3."""
     conf = _confidence_numeric(contract.confidence)
     strength = _thesis_strength(contract)
     risk_penalty = 0.0
@@ -51,6 +52,12 @@ def _score(contract: DecisionContract) -> float:
     elif _risk_level(contract) == "high":
         risk_penalty = 0.6
     return conf + strength - risk_penalty
+
+
+def _score(contract: DecisionContract) -> float:
+    """Normalized opportunity score in [0.0, 1.0] for trace and probe threshold."""
+    raw = _score_raw(contract)
+    return round(max(0.0, min(1.0, (raw - 0.5) / 2.5)), 4)
 
 
 class OpportunityRanking:
@@ -75,7 +82,7 @@ class OpportunityRanking:
             strength = _thesis_strength(contract)
             scored.append(OpportunityScore(
                 symbol=symbol,
-                score=round(s, 4),
+                score=s,
                 confidence=contract.confidence,
                 risk=risk,
                 thesis_strength=round(strength, 4),

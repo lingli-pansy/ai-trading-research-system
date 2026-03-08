@@ -43,6 +43,8 @@ def _ib_end_datetime(end_date: str | None) -> str:
 
 # 当前运行时的 IB 会话；由 weekly_paper 等 pipeline 在开始时 set、结束时 clear
 _current_session: ContextVar["IBKRSession | None"] = ContextVar("ibkr_session", default=None)
+# 供工作线程使用：ThreadPoolExecutor 内线程不继承 ContextVar，research 线程通过此处复用同一连接，避免 client_id=2 再建连导致 Error 326
+_fallback_session: "IBKRSession | None" = None
 
 
 class PositionCache:
@@ -66,12 +68,20 @@ class PositionCache:
 
 
 def get_ibkr_session() -> "IBKRSession | None":
-    """获取当前上下文中的 IB 会话；无则返回 None，调用方回退到「每次建连」。"""
-    return _current_session.get()
+    """获取当前上下文中的 IB 会话；无则返回 fallback（供工作线程复用），再无则 None。"""
+    try:
+        ctx = _current_session.get()
+        if ctx is not None:
+            return ctx
+    except LookupError:
+        pass
+    return _fallback_session
 
 
 def set_ibkr_session(session: "IBKRSession | None") -> None:
-    """设置当前上下文的 IB 会话；pipeline 开始时 set(session)，结束时 set(None)。"""
+    """设置当前上下文的 IB 会话；pipeline 开始时 set(session)，结束时 set(None)。同时更新 fallback 供工作线程使用。"""
+    global _fallback_session
+    _fallback_session = session
     _current_session.set(session)
 
 

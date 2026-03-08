@@ -7,7 +7,11 @@ from typing import Any
 
 from ai_trading_research_system.autonomous.schemas import AccountSnapshot, WeeklyTradingMandate
 from ai_trading_research_system.autonomous.portfolio_policy import default_policy
-from ai_trading_research_system.autonomous.decision_trace import DecisionTrace
+from ai_trading_research_system.autonomous.decision_trace import (
+    DecisionTrace,
+    PortfolioDecisionTrace,
+    SymbolDecisionTrace,
+)
 
 
 def _health_float(health: Any, key: str) -> float | None:
@@ -87,7 +91,15 @@ class PortfolioAllocator:
                 allocation_rationale="no_signals",
                 no_trade=True,
                 no_trade_reason="no_signals",
-                decision_traces=[DecisionTrace(_now(), "", 0.0, _health_ctx(), _policy_ctx(getattr(mandate, "policy", None)), trigger_context or {}, "no_signals", "no_trade").to_dict()],
+                decision_traces=[
+                    PortfolioDecisionTrace(
+                        _now(),
+                        "no_signals",
+                        trigger_context or {},
+                        _health_ctx(),
+                        _policy_ctx(getattr(mandate, "policy", None)),
+                    ).to_dict(),
+                ],
             )
 
         policy = getattr(mandate, "policy", None) or default_policy()
@@ -302,17 +314,46 @@ class PortfolioAllocator:
             sym = dec.get("symbol_in", "")
             sig = signal_by_symbol.get(sym, {})
             score = float(sig.get("score", 0) or 0)
-            reason = dec.get("reason", "replace")
             thesis, drivers, risks = _research_from_signal(sig)
-            decision_traces_list.append(DecisionTrace(_now(), sym, score, health_context, policy_constraints, tr_ctx, reason, "replace", research_thesis=thesis, research_key_drivers=drivers, research_risk_factors=risks).to_dict())
+            decision_traces_list.append(
+                SymbolDecisionTrace(
+                    _now(), sym, thesis, score, drivers, risks, "replace",
+                ).to_dict(),
+            )
         for rej in rejected_opportunities:
             sym = rej.get("symbol", "")
             sig = signal_by_symbol.get(sym, {})
             score = float(rej.get("score", 0) or 0)
-            reason = rej.get("reason", "rejected")
             thesis, drivers, risks = _research_from_signal(sig)
-            decision_traces_list.append(DecisionTrace(_now(), sym, score, health_context, policy_constraints, tr_ctx, reason, "rejected", research_thesis=thesis, research_key_drivers=drivers, research_risk_factors=risks).to_dict())
-        decision_traces_list.append(DecisionTrace(_now(), "", 0.0, health_context, policy_constraints, tr_ctx, " ".join(rationale_parts), "rebalance" if targets else "no_trade").to_dict())
+            decision_traces_list.append(
+                SymbolDecisionTrace(
+                    _now(), sym, thesis, score, drivers, risks, "rejected",
+                ).to_dict(),
+            )
+        traced_symbols = {dec.get("symbol_in", "") for dec in replacement_decisions} | {rej.get("symbol", "") for rej in rejected_opportunities}
+        for t in targets:
+            sym = t.get("symbol", "")
+            if not sym or sym in traced_symbols:
+                continue
+            sig = signal_by_symbol.get(sym, {})
+            score = float(sig.get("score", t.get("score", 0)) or 0)
+            thesis, drivers, risks = _research_from_signal(sig)
+            final_action = "retain" if sym in current_positions else "entry"
+            decision_traces_list.append(
+                SymbolDecisionTrace(
+                    _now(), sym, thesis, score, drivers, risks, final_action,
+                ).to_dict(),
+            )
+            traced_symbols.add(sym)
+        decision_traces_list.append(
+            PortfolioDecisionTrace(
+                _now(),
+                " ".join(rationale_parts),
+                tr_ctx,
+                health_context,
+                policy_constraints,
+            ).to_dict(),
+        )
 
         return AllocationResult(
             target_positions=targets,

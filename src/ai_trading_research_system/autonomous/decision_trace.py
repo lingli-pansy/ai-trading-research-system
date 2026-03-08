@@ -1,5 +1,6 @@
 """
-Decision Traceability: DecisionTrace、TriggerTrace，用于调仓与触发的可追溯记录。
+Decision Traceability: PortfolioDecisionTrace, SymbolDecisionTrace, DecisionTrace, TriggerTrace.
+UC-10: 区分 portfolio-level（allocator_reason / trigger / risk）与 symbol-level（symbol / thesis / opportunity_score / key_drivers / risk_factors / final_action）。
 """
 from __future__ import annotations
 
@@ -9,8 +10,52 @@ from typing import Any
 
 
 @dataclass
+class PortfolioDecisionTrace:
+    """组合级决策记录：allocator 原因、触发上下文、风险/健康上下文。"""
+    timestamp: str
+    allocator_reason: str
+    trigger_context: dict[str, Any]
+    health_context: dict[str, Any]
+    policy_constraints: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "trace_type": "portfolio",
+            "timestamp": self.timestamp,
+            "allocator_reason": self.allocator_reason,
+            "trigger_context": self.trigger_context,
+            "health_context": self.health_context,
+            "policy_constraints": self.policy_constraints,
+        }
+
+
+@dataclass
+class SymbolDecisionTrace:
+    """标的级决策记录：symbol、研究结论、opportunity_score、key_drivers、risk_factors、final_action。"""
+    timestamp: str
+    symbol: str
+    research_thesis: str
+    opportunity_score: float
+    key_drivers: list[str]
+    risk_factors: list[str]
+    final_action: str  # replace | rejected | retain | no_trade
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "trace_type": "symbol",
+            "timestamp": self.timestamp,
+            "symbol": self.symbol,
+            "research_thesis": self.research_thesis,
+            "opportunity_score": self.opportunity_score,
+            "key_drivers": self.key_drivers,
+            "risk_factors": self.risk_factors,
+            "final_action": self.final_action,
+        }
+
+
+@dataclass
 class DecisionTrace:
-    """单次分配决策的可追溯记录；含 LLM research reasoning（thesis / key_drivers / risk_factors）。"""
+    """单次分配决策的可追溯记录（兼容旧格式）；含 LLM research reasoning。to_dict 带 trace_type 便于报告拆分。"""
     timestamp: str
     symbol: str
     opportunity_score: float
@@ -20,14 +65,12 @@ class DecisionTrace:
     allocator_reason: str
     final_action: str  # replace | retain | rejected | rebalance | no_trade
     research_thesis: str = ""
-    """DecisionContract 中的 thesis（研究结论）。"""
     research_key_drivers: list[str] = field(default_factory=list)
-    """DecisionContract 中的 key_drivers。"""
     research_risk_factors: list[str] = field(default_factory=list)
-    """DecisionContract 中的 risk_flags，作为 research risk factors。"""
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "trace_type": "portfolio" if not self.symbol else "symbol",
             "timestamp": self.timestamp,
             "symbol": self.symbol,
             "opportunity_score": self.opportunity_score,

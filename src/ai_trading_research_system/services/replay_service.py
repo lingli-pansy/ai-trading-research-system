@@ -111,11 +111,11 @@ def run_experiment_replay(
                 sym = t.get("symbol", "")
                 if not sym or sym in by_sym:
                     continue
-                if t.get("research_thesis") or t.get("research_key_drivers") or t.get("research_risk_factors"):
+                if t.get("research_thesis") or t.get("research_key_drivers") or t.get("key_drivers") or t.get("research_risk_factors") or t.get("risk_factors"):
                     by_sym[sym] = {
                         "research_thesis": t.get("research_thesis", ""),
-                        "research_key_drivers": list(t.get("research_key_drivers") or []),
-                        "research_risk_factors": list(t.get("research_risk_factors") or []),
+                        "research_key_drivers": list(t.get("key_drivers") or t.get("research_key_drivers") or []),
+                        "research_risk_factors": list(t.get("risk_factors") or t.get("research_risk_factors") or []),
                     }
             if by_sym:
                 recorded_research_by_symbol = by_sym
@@ -213,6 +213,8 @@ def compare_decision_traces(
 
     def _first_policy(traces: list[dict]) -> dict[str, Any]:
         for t in traces:
+            if t.get("trace_type") == "symbol":
+                continue
             pc = t.get("policy_constraints") or {}
             if pc:
                 return pc

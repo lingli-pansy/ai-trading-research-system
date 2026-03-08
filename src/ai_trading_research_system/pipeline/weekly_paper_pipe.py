@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,7 @@ from ai_trading_research_system.autonomous.adjustment_trigger import (
     TRIGGER_BETA_SPIKE,
     TRIGGER_EXCESS_DRAWDOWN,
 )
+from ai_trading_research_system.autonomous.decision_trace import SymbolDecisionTrace
 
 
 @dataclass
@@ -213,23 +215,33 @@ def run_weekly_autonomous_paper(
             _progress(f"Day {day + 1}/{duration_days}: ranking & allocator...")
             ranked: list[OpportunityScore] = ranker.rank([(s, c) for s, _, c in contracts_for_day])
             contract_by_symbol = {s: (ctx, c) for s, ctx, c in contracts_for_day}
-            wait_any = any(
-                c.suggested_action in ("wait_confirmation", "watch", "forbid_trade") or c.confidence == "low"
-                for _, _, c in contracts_for_day
-            )
+            policy = getattr(mandate, "policy", None)
+            probe_threshold = getattr(policy, "opportunity_score_probe_threshold", 0.4) if policy else 0.4
+            probe_size = 0.03
+            can_trade_or_probe_any = False
             signals = []
             for o in ranked:
                 _, contract = contract_by_symbol[o.symbol]
                 signal = translator.translate(contract)
+                if contract.suggested_action in ("wait_confirmation", "watch") and contract.confidence in ("medium", "high") and o.score >= probe_threshold:
+                    size_fraction = probe_size
+                    rationale = f"probe (score={o.score:.2f} >= {probe_threshold})"
+                    can_trade_or_probe_any = True
+                else:
+                    size_fraction = signal.allowed_position_size
+                    rationale = signal.rationale
+                    if size_fraction > 0 or contract.suggested_action in ("allow_entry", "probe_small"):
+                        can_trade_or_probe_any = True
                 signals.append({
                     "symbol": o.symbol,
-                    "size_fraction": signal.allowed_position_size,
-                    "rationale": signal.rationale,
+                    "size_fraction": size_fraction,
+                    "rationale": rationale,
                     "score": o.score,
                     "research_thesis": getattr(contract, "thesis", "") or "",
                     "research_key_drivers": list(getattr(contract, "key_drivers", []) or [])[:10],
                     "research_risk_factors": list(getattr(contract, "risk_flags", []) or []),
                 })
+            wait_any = not can_trade_or_probe_any
             opportunity_ranking_week = [{"symbol": o.symbol, "score": o.score, "confidence": o.confidence, "risk": o.risk} for o in ranked]
             spy_returns, bench_ret_day, vol_day, max_dd_day = get_benchmark_returns_and_volatility(
                 symbol=benchmark, lookback_days=min(max(day + 1, 2), 21)
@@ -283,6 +295,21 @@ def run_weekly_autonomous_paper(
                 trigger_context=trigger_trace.to_dict() if hasattr(trigger_trace, "to_dict") else {},
             )
             decision_traces_week.extend(getattr(alloc_result, "decision_traces", []) or [])
+            if wait_any and alloc_result.no_trade:
+                _ts = datetime.now(timezone.utc).isoformat()
+                for o in ranked:
+                    _, contract = contract_by_symbol[o.symbol]
+                    decision_traces_week.append(
+                        SymbolDecisionTrace(
+                            _ts,
+                            o.symbol,
+                            getattr(contract, "thesis", "") or "",
+                            o.score,
+                            list(getattr(contract, "key_drivers", []) or [])[:10],
+                            list(getattr(contract, "risk_flags", []) or []),
+                            "no_trade",
+                        ).to_dict(),
+                    )
             replacement_decisions_week.extend(alloc_result.replacement_decisions)
             positions_changed = [t.get("symbol") for t in alloc_result.target_positions if t.get("symbol")]
             intraday_adjustments_week.append({
