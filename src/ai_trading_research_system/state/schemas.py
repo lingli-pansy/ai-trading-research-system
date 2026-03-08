@@ -131,9 +131,10 @@ class ExperienceRecord:
     decision_summary: str
     portfolio_before: dict[str, Any]
     portfolio_after: dict[str, Any]
+    approval_decision: str = ""  # approve | reject | defer，供后续 learning 使用
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "run_id": self.run_id,
             "timestamp": self.timestamp,
             "symbols": list(self.symbols),
@@ -142,3 +143,6 @@ class ExperienceRecord:
             "portfolio_before": dict(self.portfolio_before),
             "portfolio_after": dict(self.portfolio_after),
         }
+        if self.approval_decision:
+            out["approval_decision"] = self.approval_decision
+        return out

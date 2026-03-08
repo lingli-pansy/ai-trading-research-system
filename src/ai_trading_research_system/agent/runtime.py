@@ -126,6 +126,7 @@ class AutonomousTradingAgent:
         if position_count == 0 and rebalance_plan:
             position_count = len([x for x in (rebalance_plan.get("items") or []) if (x.get("target_position") or 0) > 0])
         risk_flags = getattr(out, "risk_flags", None) or []
+        approval_decision = getattr(out, "approval_decision", "") or ""
 
         index_entry = RunIndexEntry(
             run_id=run_id,
@@ -145,6 +146,7 @@ class AutonomousTradingAgent:
             decision_summary=decision_summary,
             portfolio_before=portfolio_before or {},
             portfolio_after=portfolio_after or {},
+            approval_decision=approval_decision,
         )
         store.append_experience(experience.to_dict())
 
@@ -162,6 +164,7 @@ class AutonomousTradingAgent:
             "turnover": turnover,
             "position_count": position_count,
             "risk_flags": risk_flags,
+            "approval_decision": approval_decision,
         }
 
     def run_loop(
@@ -217,7 +220,7 @@ def _format_plan_summary(plan: dict[str, Any]) -> list[str]:
 
 def format_run_observability(summary: dict[str, Any]) -> str:
     """
-    单次 run 的可观测输出：RUN, PLAN, RISK, EXECUTION, PORTFOLIO。
+    单次 run 的可观测输出：RUN, PROPOSAL, RISK FLAGS, APPROVAL, EXECUTION, PORTFOLIO。
     供 CLI 或 OpenClaw 直接打印。
     """
     run_id = summary.get("run_id", "")
@@ -228,14 +231,15 @@ def format_run_observability(summary: dict[str, Any]) -> str:
     turnover = summary.get("turnover", 0)
     position_count = summary.get("position_count", 0)
     risk_flags = summary.get("risk_flags") or []
+    approval = summary.get("approval_decision", "") or "approve"
     parts = [
         f"RUN {run_id}",
-        "PLAN",
+        "PROPOSAL",
         *([str(x) for x in plan_lines] if plan_lines else ["(no plan)"]),
-        "RISK",
-        f"turnover={turnover:.2f}",
-        f"position_count={position_count}",
-        f"flags={risk_flags!r}",
+        "RISK FLAGS",
+        f"turnover={turnover:.2f} position_count={position_count} flags={risk_flags!r}",
+        "APPROVAL",
+        approval,
         "EXECUTION",
         f"{orders} orders",
         "PORTFOLIO",

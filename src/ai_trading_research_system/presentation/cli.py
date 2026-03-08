@@ -116,6 +116,12 @@ def main() -> int:
     p_openclaw_loop.add_argument("--config", required=True, help="Path to OpenClaw agent config (yaml/json)")
     p_openclaw_loop.add_argument("--context", action="store_true", help="Include health/experience summary each run")
 
+    p_proposal_run = subparsers.add_parser("proposal-run", help="Generate proposal only (no approval, no execution)")
+    p_proposal_run.add_argument("--symbols", default="NVDA", help="Comma-separated symbols (default: NVDA)")
+    p_proposal_run.add_argument("--capital", type=float, default=10000, help="Capital (default 10000)")
+    p_proposal_run.add_argument("--benchmark", default="SPY", help="Benchmark (default SPY)")
+    _add_common(p_proposal_run)
+
     args = parser.parse_args()
 
     if args.command == "agent-run-once":
@@ -161,6 +167,32 @@ def main() -> int:
             on_run_done=on_run_done,
         )
         return 0
+
+    if args.command == "proposal-run":
+        import time
+        from ai_trading_research_system.application.commands.run_autonomous_paper_cycle import run_autonomous_paper_cycle
+        from ai_trading_research_system.state.run_store import get_run_store
+        symbols = [s.strip() for s in (args.symbols or "NVDA").split(",") if s.strip()]
+        run_id = f"run_{int(time.time())}"
+        out = run_autonomous_paper_cycle(
+            run_id=run_id,
+            symbol_universe=symbols,
+            use_mock=not getattr(args, "llm", False),
+            use_llm=getattr(args, "llm", False),
+            capital=getattr(args, "capital", 10000),
+            benchmark=getattr(args, "benchmark", "SPY"),
+            execute_paper=True,
+            proposal_only=True,
+        )
+        store = get_run_store()
+        proposal_path = store.path_for_artifact(run_id, "approval_request")
+        proposal = store.read_proposal(run_id) or {}
+        summary_lines = proposal.get("proposal_summary") or []
+        print("PROPOSAL")
+        for line in summary_lines:
+            print(" ", line)
+        print("PROPOSAL_PATH", proposal_path)
+        return 0 if out.ok else 1
 
     if args.command == "openclaw-agent-once":
         from ai_trading_research_system.openclaw.config import OpenClawAgentConfig

@@ -1,17 +1,52 @@
 """
 OpenClaw Agent Adapter: 稳定门面，将 OpenClaw 映射到 AutonomousTradingAgent。
 不暴露 pipeline 细节；输入为 OpenClawAgentConfig，输出为结构化 summary。
+OpenClaw agent 作为 proposal approver：approve_proposal(proposal, context) -> ApprovalDecision。
 """
 from __future__ import annotations
 
+from collections.abc import Callable
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from ai_trading_research_system.agent.health import get_health
 from ai_trading_research_system.agent.runtime import AutonomousTradingAgent, format_run_observability
 from ai_trading_research_system.openclaw.config import OpenClawAgentConfig
+from ai_trading_research_system.runtime.proposal import Proposal, ApprovalDecision
 from ai_trading_research_system.state.experience_store import ExperienceStore, get_experience_store
 from ai_trading_research_system.state.run_store import RunStore, get_run_store
+
+
+def approve_proposal(
+    proposal: Proposal | dict[str, Any],
+    context: dict[str, Any],
+    *,
+    approver: Callable[[dict[str, Any], dict[str, Any]], ApprovalDecision | dict[str, Any]] | None = None,
+) -> ApprovalDecision:
+    """
+    OpenClaw agent 作为 proposal approver：根据 proposal 与 context 返回结构化 decision。
+    context 至少包含：proposal_summary, risk_flags, recent_runs, portfolio_exposure（及可选 symbol 历史）。
+    返回必须是 approve | reject | defer。
+    approver 可选：若提供则调用 approver(proposal.to_dict(), context)，否则默认 approve。
+    """
+    prop_dict = proposal.to_dict() if isinstance(proposal, Proposal) else proposal
+    run_id = str(prop_dict.get("run_id", ""))
+    ts = datetime.now(timezone.utc).isoformat()
+    if approver is not None:
+        out = approver(prop_dict, context)
+        if isinstance(out, ApprovalDecision):
+            return out
+        return ApprovalDecision.from_dict(out) or ApprovalDecision(
+            run_id=run_id, decision="defer", reviewer="openclaw", reason="invalid_decision", timestamp=ts,
+        )
+    return ApprovalDecision(
+        run_id=run_id,
+        decision="approve",
+        reviewer="openclaw_default",
+        reason="no_approver",
+        timestamp=ts,
+    )
 
 
 def create_openclaw_agent(config: OpenClawAgentConfig) -> AutonomousTradingAgent:
@@ -62,6 +97,7 @@ def run_openclaw_agent_once(config: OpenClawAgentConfig) -> dict[str, Any]:
         "run_path": run_path,
         "agent_name": config.name,
         "symbols": config.symbols,
+        "approval_decision": summary.get("approval_decision", "") or "approve",
     }
 
 
@@ -126,12 +162,13 @@ def format_openclaw_run_output(summary: dict[str, Any], *, include_context: bool
         f"OK {summary.get('ok', False)}",
         f"DECISION {summary.get('decision_summary', '')}",
         f"RISK_FLAGS {summary.get('risk_flags', [])}",
+        f"APPROVAL {summary.get('approval_decision', '') or 'approve'}",
         f"ORDERS {summary.get('orders_executed', 0)}",
         f"PORTFOLIO {summary.get('portfolio_before', {}).get('value')} -> {summary.get('portfolio_after', {}).get('value')}",
         f"RUN_PATH {summary.get('run_path', '')}",
     ]
     if summary.get("rebalance_summary"):
-        lines.insert(4, "PLAN " + " | ".join(str(x) for x in summary["rebalance_summary"]))
+        lines.insert(4, "PROPOSAL " + " | ".join(str(x) for x in summary["rebalance_summary"]))
     if include_context:
         ctx = summary.get("context_summary")
         if ctx:

@@ -184,6 +184,22 @@ class RunStore:
     def write_rebalance_plan(self, run_id: str, data: dict[str, Any]) -> str:
         return self.write_artifact(run_id, "rebalance_plan", data)
 
+    def write_proposal(self, run_id: str, data: dict[str, Any]) -> str:
+        """写入 approval_request.json（proposal 即 approval request 内容）。"""
+        return self.write_artifact(run_id, "approval_request", data)
+
+    def read_proposal(self, run_id: str) -> dict[str, Any] | None:
+        """读取 approval_request.json。"""
+        return self.read_artifact(run_id, "approval_request")  # type: ignore[return-value]
+
+    def write_approval_decision(self, run_id: str, data: dict[str, Any]) -> str:
+        """写入 approval_decision.json。"""
+        return self.write_artifact(run_id, "approval_decision", data)
+
+    def read_approval_decision(self, run_id: str) -> dict[str, Any] | None:
+        """读取 approval_decision.json。"""
+        return self.read_artifact(run_id, "approval_decision")  # type: ignore[return-value]
+
     def read_artifact(self, run_id: str, name: str) -> dict[str, Any] | list | None:
         """name: candidate_decision | final_decision | order_intents | rebalance_plan."""
         path = self._artifacts_dir(run_id) / f"{name}.json"
@@ -416,6 +432,8 @@ class RunStore:
         candidate = self.read_artifact(run_id, "candidate_decision")
         final = self.read_artifact(run_id, "final_decision")
         rebalance_plan = self.read_artifact(run_id, "rebalance_plan")
+        proposal = self.read_proposal(run_id)
+        approval_decision = self.read_approval_decision(run_id)
         execution = self.read_execution(run_id)
         before = self.read_snapshot(run_id, "portfolio_before")
         after = self.read_snapshot(run_id, "portfolio_after")
@@ -436,6 +454,8 @@ class RunStore:
             "decision": final,
             "final_decision": final,
             "rebalance_plan": rebalance_plan,
+            "proposal": proposal,
+            "approval_decision": approval_decision,
             "execution": execution,
             "portfolio_before": before,
             "portfolio_after": after,

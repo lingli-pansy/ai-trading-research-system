@@ -29,11 +29,13 @@ def run_autonomous_paper_cycle(
     benchmark: str = "SPY",
     execute_paper: bool = True,
     runs_root: Path | None = None,
+    proposal_only: bool = False,
+    approval_callback: Any = None,
 ) -> CycleOutput:
     """
     OpenClaw agent 调用此方法即可触发一轮 autonomous paper cycle。
-    读组合 → 研究 → 规则/风控 → 最终决策 → 订单意图（可选执行）→ 落盘。
-    所有状态与审计写入 state.RunStore（默认 runs/<run_id>/）。
+    读组合 → 研究 → 规则/风控 → proposal → approval → execute_if_approved → 落盘。
+    proposal_only=True 时仅生成 proposal 不执行；approval_callback 为 None 时 auto-approve。
     """
     if not run_id:
         run_id = f"run_{int(time.time())}"
@@ -51,5 +53,7 @@ def run_autonomous_paper_cycle(
         capital=capital,
         benchmark=benchmark,
         execute_paper=execute_paper,
+        proposal_only=proposal_only,
+        approval_callback=approval_callback,
     )
     return _run_cycle(inp, run_store=store)

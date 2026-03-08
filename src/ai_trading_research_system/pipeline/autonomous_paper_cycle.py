@@ -1,10 +1,11 @@
 """
 单周期自治 Paper 编排：分阶段、有状态闭环、可 replay、可解释调仓。
 主入口 run_autonomous_paper_cycle 编排：load_state → build_research_bundle → evaluate_trigger_and_allocate
-→ build_rebalance_plan → execute_paper_orders → finalize_run。
+→ build_rebalance_plan → (risk) → generate_proposal → approval → execute_if_approved → finalize_run。
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,6 +39,7 @@ from ai_trading_research_system.state.schemas import (
     action_type_from_weights,
 )
 from ai_trading_research_system.services.benchmark_service import get_benchmark_returns_and_volatility
+from ai_trading_research_system.runtime.proposal import Proposal, ApprovalDecision
 
 
 @dataclass
@@ -54,6 +56,8 @@ class CycleInput:
     capital: float = 10_000.0
     benchmark: str = "SPY"
     execute_paper: bool = True
+    proposal_only: bool = False  # 仅生成 proposal，不等待 approval、不执行
+    approval_callback: Callable[[Proposal, dict[str, Any]], ApprovalDecision] | None = None
 
 
 @dataclass
@@ -73,6 +77,7 @@ class CycleOutput:
     write_paths: dict[str, str] = field(default_factory=dict)
     error: str = ""
     risk_flags: list[str] = field(default_factory=list)
+    approval_decision: str = ""  # approve | reject | defer，供 observability
 
 
 def _snapshot_to_dict(snap: AccountSnapshot) -> dict[str, Any]:
@@ -319,6 +324,81 @@ def execute_paper_orders(
     return results
 
 
+# ---------- Proposal 与 execute_if_approved ----------
+def _format_plan_summary(plan: RebalancePlan) -> list[str]:
+    """PLAN 可读摘要。"""
+    if plan.no_trade_reason:
+        return [plan.no_trade_reason]
+    return [f"{x.symbol} {x.action_type} {x.delta:.2f}" for x in plan.items]
+
+
+def _build_proposal(
+    run_id: str,
+    filtered_plan: RebalancePlan,
+    check_result: RiskCheckResult,
+    portfolio_before_dict: dict[str, Any],
+    store: RunStore,
+    recent_runs_n: int = 5,
+) -> Proposal:
+    """从 filtered plan 与 risk 结果构建 Proposal。"""
+    from ai_trading_research_system.state.experience_store import get_experience_store
+    equity = float(portfolio_before_dict.get("equity") or portfolio_before_dict.get("equity_estimate") or portfolio_before_dict.get("cash") or 0)
+    positions = portfolio_before_dict.get("positions") or []
+    exposure: dict[str, Any] = {}
+    for p in positions:
+        sym = p.get("symbol")
+        if sym:
+            w = _current_weight(p, equity) if equity else 0.0
+            exposure[sym] = round(w, 4)
+    exp_store = get_experience_store(root=store._root)
+    recent = exp_store.get_recent_runs(recent_runs_n)
+    recent_summary = [
+        {"run_id": r.get("run_id", ""), "timestamp": r.get("timestamp", ""), "decision_summary": (r.get("decision_summary") or "")[:80]}
+        for r in recent
+    ]
+    suggested = "; ".join(_format_plan_summary(filtered_plan)[:5]) or "no_trade"
+    return Proposal(
+        run_id=run_id,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        proposal_summary=_format_plan_summary(filtered_plan),
+        rebalance_plan=filtered_plan.to_dict(),
+        risk_flags=list(check_result.risk_flags),
+        portfolio_before_summary={"value": equity, "equity": equity},
+        portfolio_exposure=exposure,
+        recent_experience_summary=recent_summary,
+        suggested_action=suggested,
+    )
+
+
+def execute_if_approved(
+    run_id: str,
+    decision: ApprovalDecision,
+    filtered_plan: RebalancePlan,
+    filtered_target_positions: list[dict[str, Any]],
+    contract_by_symbol: dict[str, tuple[ResearchContext, DecisionContract]],
+    portfolio_before_dict: dict[str, Any],
+    use_mock: bool,
+    execute_paper: bool,
+    store: RunStore,
+    paths: dict[str, str],
+) -> list[dict[str, Any]]:
+    """根据 decision 决定是否执行；approve 时执行并返回 paper_results，否则返回 []。"""
+    if decision.decision != "approve":
+        finalize_run(run_id, store, portfolio_before_dict, filtered_plan, [], paths)
+        return []
+    paper_results = execute_paper_orders(
+        run_id,
+        type("_Alloc", (), {"target_positions": filtered_target_positions})(),
+        contract_by_symbol,
+        use_mock,
+        execute_paper,
+    )
+    if paper_results:
+        paths["paper_execution"] = store.path_for_execution(run_id)
+    finalize_run(run_id, store, portfolio_before_dict, filtered_plan, paper_results, paths)
+    return paper_results
+
+
 # ---------- 阶段 6: finalize_run (portfolio_after, audit, meta) ----------
 def finalize_run(
     run_id: str,
@@ -526,24 +606,65 @@ def run_autonomous_paper_cycle(
         paths["rebalance_plan"] = store.path_for_artifact(run_id, "rebalance_plan")
         audit("final_decision", {"order_intents_count": len(filtered_order_intents), "risk_flags": check_result.risk_flags})
 
-        # 5) execute_paper_orders（使用 filtered target_positions）
-        class _FilteredAlloc:
-            target_positions = filtered_target_positions
+        # 4.6) 生成 Proposal，写入 approval_request.json
+        proposal = _build_proposal(
+            run_id, filtered_plan, check_result, _snapshot_to_dict(snap), store,
+        )
+        store.write_proposal(proposal.to_dict())
+        paths["approval_request"] = store.path_for_artifact(run_id, "approval_request")
+        audit("proposal_created", {"proposal_summary": proposal.proposal_summary})
 
-        paper_results = execute_paper_orders(
+        if input_.proposal_only:
+            return CycleOutput(
+                ok=True,
+                run_id=run_id,
+                candidate_decision=[{"symbol": c.symbol, "action": c.suggested_action, "confidence": c.confidence} for _, _, c in contracts_for_cycle],
+                final_decision={"order_intents": filtered_order_intents, "target_positions": filtered_target_positions, "rebalance_plan": filtered_plan.to_dict()},
+                order_intents=filtered_order_intents,
+                rebalance_plan=filtered_plan.to_dict(),
+                paper_execution_results=[],
+                trace=store.read_audit(run_id),
+                write_paths=paths,
+                risk_flags=check_result.risk_flags,
+            )
+
+        # 4.7) 获取 ApprovalDecision（callback 或 auto-approve）
+        if input_.approval_callback is not None:
+            context = {
+                "proposal_summary": proposal.proposal_summary,
+                "risk_flags": proposal.risk_flags,
+                "recent_runs": proposal.recent_experience_summary,
+                "portfolio_exposure": proposal.portfolio_exposure,
+            }
+            decision = input_.approval_callback(proposal, context)
+        else:
+            decision = ApprovalDecision(
+                run_id=run_id,
+                decision="approve",
+                reviewer="auto",
+                reason="no_callback",
+                timestamp=datetime.now(timezone.utc).isoformat(),
+            )
+        store.write_approval_decision(decision.to_dict())
+        paths["approval_decision"] = store.path_for_artifact(run_id, "approval_decision")
+        audit("approval_decision", {"decision": decision.decision, "reviewer": decision.reviewer})
+
+        # 5) execute_if_approved
+        paper_results = execute_if_approved(
             run_id,
-            _FilteredAlloc(),
+            decision,
+            filtered_plan,
+            filtered_target_positions,
             contract_by_symbol,
+            _snapshot_to_dict(snap),
             input_.use_mock,
             input_.execute_paper,
+            store,
+            paths,
         )
-        if paper_results:
-            paths["paper_execution"] = store.path_for_execution(run_id)
-            audit("paper_execution_done", {"results_count": len(paper_results)})
-
-        # 6) finalize_run（使用 filtered_plan）
-        finalize_run(run_id, store, _snapshot_to_dict(snap), filtered_plan, paper_results, paths)
         paths["portfolio_after"] = store.path_for_snapshot(run_id, "portfolio_after")
+        if paper_results:
+            audit("paper_execution_done", {"results_count": len(paper_results)})
 
         return CycleOutput(
             ok=True,
@@ -556,6 +677,7 @@ def run_autonomous_paper_cycle(
             trace=store.read_audit(run_id),
             write_paths=paths,
             risk_flags=check_result.risk_flags,
+            approval_decision=decision.decision,
         )
     except Exception as e:
         store.append_audit(run_id, {"error": str(e), "phase": "cycle"})

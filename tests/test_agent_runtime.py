@@ -44,6 +44,7 @@ def test_format_run_observability_includes_turnover_position_count_risk_flags() 
     }
     out = format_run_observability(summary)
     assert "RUN run_20260101_0930" in out
+    assert "PROPOSAL" in out and "APPROVAL" in out and "approve" in out
     assert "turnover=0.18" in out
     assert "position_count=3" in out
     assert "flags=[]" in out
