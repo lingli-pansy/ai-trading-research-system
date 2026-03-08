@@ -120,6 +120,11 @@ def main() -> int:
     p_openclaw_smoke.add_argument("--config", required=True, help="Path to OpenClaw agent config (yaml/json)")
     p_openclaw_smoke.add_argument("--raw", default=None, help="Mock raw agent output (default: approve)")
 
+    p_trading_intent = subparsers.add_parser("openclaw-trading-intent", help="OpenClaw: route user message to intent handler (start_build_position / show_portfolio / review_latest_proposal / approve_execution)")
+    p_trading_intent.add_argument("--message", required=True, help="User message (e.g. 开始建仓 / 当前投资情况 / 调仓建议 / 确认执行)")
+    p_trading_intent.add_argument("--config", default=None, help="Path to OpenClaw agent config (optional)")
+    p_trading_intent.add_argument("--json", action="store_true", help="Output raw JSON only (default: pretty-print)")
+
     p_proposal_run = subparsers.add_parser("proposal-run", help="Generate proposal only (no approval, no execution)")
     p_proposal_run.add_argument("--symbols", default="NVDA", help="Comma-separated symbols (default: NVDA)")
     p_proposal_run.add_argument("--capital", type=float, default=10000, help="Capital (default 10000)")
@@ -224,6 +229,36 @@ def main() -> int:
         result = run_openclaw_approver_smoke(config, raw_agent_output=getattr(args, "raw", None))
         print(format_approver_smoke_summary(result))
         return 0 if result.get("ok", True) else 1
+
+    if args.command == "openclaw-trading-intent":
+        from ai_trading_research_system.openclaw.agent_adapter import (
+            route_user_intent,
+            handle_start_build_position,
+            handle_show_portfolio,
+            handle_review_latest_proposal,
+            handle_approve_execution,
+        )
+        from ai_trading_research_system.openclaw.config import OpenClawAgentConfig
+        msg = getattr(args, "message", "") or ""
+        intent = route_user_intent(msg)
+        config = None
+        if getattr(args, "config", None):
+            config = OpenClawAgentConfig.load(Path(args.config))
+        if intent == "start_build_position":
+            out = handle_start_build_position(config=config)
+        elif intent == "show_portfolio":
+            out = handle_show_portfolio(runs_root=config.runs_root if config else None)
+        elif intent == "review_latest_proposal":
+            out = handle_review_latest_proposal(runs_root=config.runs_root if config else None)
+        elif intent == "approve_execution":
+            out = handle_approve_execution(runs_root=config.runs_root if config else None, config=config)
+        else:
+            out = {"intent": "unknown", "ok": False, "message": "未识别的指令，请说：开始建仓 / 当前投资情况 / 调仓建议 / 确认执行"}
+        if getattr(args, "json", False):
+            print(json.dumps(out, ensure_ascii=False, indent=0))
+        else:
+            print(json.dumps(out, ensure_ascii=False, indent=2))
+        return 0 if out.get("ok", True) else 1
 
     if args.command == "openclaw-agent-loop":
         from ai_trading_research_system.openclaw.config import OpenClawAgentConfig

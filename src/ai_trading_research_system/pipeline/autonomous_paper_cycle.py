@@ -1025,3 +1025,89 @@ def run_autonomous_paper_cycle(
             trace=store.read_audit(run_id),
             write_paths=paths,
         )
+
+
+def run_execution_after_approval(
+    run_id: str,
+    store: RunStore,
+    *,
+    use_mock: bool = True,
+) -> list[dict[str, Any]]:
+    """
+    对已写入 approval_decision(approve) 的 run 仅执行 paper 执行与 finalize。
+    不修改 runtime/proposal/其他阶段；仅读 store 中已有 proposal/rebalance_plan/research/approval_decision，
+    构建 contract_by_symbol 后调用 execute_paper_orders + finalize_run。
+    返回 paper_execution_results；若未 approve 或缺少数据则返回 []。
+    """
+    decision_data = store.read_approval_decision(run_id)
+    if not decision_data or (decision_data.get("decision") or decision_data.get("parsed_decision") or "").lower() != "approve":
+        return []
+    plan_dict = store.read_rebalance_plan(run_id)
+    if not plan_dict or not (plan_dict.get("items")):
+        return []
+    research = store.read_snapshot(run_id, "research")
+    by_symbol = (research or {}).get("by_symbol") or []
+    portfolio_before = store.read_snapshot(run_id, "portfolio_before")
+    if not portfolio_before:
+        return []
+
+    from ai_trading_research_system.research.schemas import DecisionContract, ResearchContext
+    from ai_trading_research_system.risk.policy_engine import plan_to_target_positions
+
+    _SA = ("forbid_trade", "watch", "wait_confirmation", "probe_small", "allow_entry")
+    _CONF = ("low", "medium", "high")
+    contract_by_symbol: dict[str, tuple[ResearchContext, DecisionContract]] = {}
+    for entry in by_symbol:
+        sym = entry.get("symbol", "")
+        if not sym:
+            continue
+        action = entry.get("suggested_action", "wait_confirmation")
+        if action not in _SA:
+            action = "wait_confirmation"
+        conf = entry.get("confidence", "medium")
+        if conf not in _CONF:
+            conf = "medium"
+        ctx = ResearchContext(symbol=sym, price_summary="", fundamentals_summary="", news_summaries=[])
+        contract = DecisionContract(
+            symbol=sym,
+            thesis=entry.get("thesis", "") or "",
+            key_drivers=entry.get("key_drivers") or [],
+            suggested_action=action,
+            confidence=conf,
+        )
+        contract_by_symbol[sym] = (ctx, contract)
+
+    filtered_target_positions = plan_to_target_positions(plan_dict)
+    alloc_result = type("_Alloc", (), {"target_positions": filtered_target_positions})()
+    paths: dict[str, str] = {"run_dir": str(store.run_dir(run_id))}
+    order_intents_count = len(filtered_target_positions)
+    paper_results = execute_paper_orders(
+        run_id, alloc_result, contract_by_symbol, use_mock, True
+    )
+    executed_orders_count = sum(1 for r in paper_results if r.get("order_done"))
+    total_trade_count = sum(int(r.get("trade_count", 0)) for r in paper_results)
+    any_fills = executed_orders_count > 0 or total_trade_count > 0
+    execution_status = "executed" if any_fills else "no_fills"
+    filtered_plan = RebalancePlan(
+        items=[
+            RebalancePlanItem(
+                symbol=x.get("symbol", ""),
+                current_position=float(x.get("current_position", 0) or 0),
+                target_position=float(x.get("target_position", 0) or 0),
+                delta=float(x.get("delta", 0) or 0),
+                action_type=x.get("action_type") or "HOLD",
+                reason=x.get("reason", ""),
+                confidence=x.get("confidence", "medium"),
+            )
+            for x in (plan_dict.get("items") or [])
+        ],
+        no_trade_reason=plan_dict.get("no_trade_reason", ""),
+    )
+    finalize_run(
+        run_id, store, portfolio_before, filtered_plan, paper_results, paths,
+        order_intents_count=order_intents_count,
+        execution_status=execution_status,
+        executed_orders_count=executed_orders_count,
+        total_trade_count=total_trade_count,
+    )
+    return paper_results

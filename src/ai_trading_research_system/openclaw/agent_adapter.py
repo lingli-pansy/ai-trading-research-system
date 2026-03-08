@@ -2,14 +2,16 @@
 OpenClaw Agent Adapter: 稳定门面，将 OpenClaw 映射到 AutonomousTradingAgent。
 不暴露 pipeline 细节；输入为 OpenClawAgentConfig，输出为结构化 summary。
 OpenClaw agent 作为 proposal approver：approve_proposal(proposal, context) -> ApprovalDecision。
+支持用户自然语言指令：route_user_intent + 4 handlers（开始建仓 / 当前投资 / 调仓建议 / 确认执行）。
 """
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from ai_trading_research_system.agent.health import get_health
 from ai_trading_research_system.agent.runtime import AutonomousTradingAgent, format_run_observability
@@ -329,3 +331,164 @@ def format_openclaw_run_output(summary: dict[str, Any], *, include_context: bool
             lines.append("HEALTH " + str(ctx.get("health", {})))
             lines.append("RECENT_RUNS " + str(len(ctx.get("recent_runs", []))))
     return "\n".join(lines)
+
+
+# ---------- Intent Router & User Instruction Handlers (MVP 对话入口) ----------
+
+IntentType = Literal["start_build_position", "show_portfolio", "review_latest_proposal", "approve_execution", "unknown"]
+
+
+def route_user_intent(message: str) -> IntentType:
+    """
+    根据用户消息识别意图。关键词：
+    - 开始建仓 / 建仓 / start position -> start_build_position
+    - 当前投资 / 组合 / portfolio -> show_portfolio
+    - 调仓 / 建议 / rebalance -> review_latest_proposal
+    - 确认 / 执行 / approve -> approve_execution
+    """
+    if not message or not isinstance(message, str):
+        return "unknown"
+    t = message.strip().lower()
+    if not t:
+        return "unknown"
+    if any(k in t for k in ("开始建仓", "建仓", "start position", "startposition")):
+        return "start_build_position"
+    if any(k in t for k in ("当前投资", "投资情况", "组合", "portfolio")):
+        return "show_portfolio"
+    if any(k in t for k in ("调仓", "建议", "rebalance", "有没有调仓")):
+        return "review_latest_proposal"
+    if any(k in t for k in ("确认", "执行", "approve", "确认执行")):
+        return "approve_execution"
+    return "unknown"
+
+
+def handle_start_build_position(
+    *,
+    config: OpenClawAgentConfig | None = None,
+    runs_root: Path | None = None,
+) -> dict[str, Any]:
+    """
+    运行 autonomous_paper_cycle（proposal_only=True），返回 proposal + recommendation。
+    """
+    from ai_trading_research_system.application.commands.run_autonomous_paper_cycle import run_autonomous_paper_cycle
+
+    cfg = config or OpenClawAgentConfig()
+    root = runs_root or cfg.runs_root
+    run_id = f"run_{int(time.time())}"
+    out = run_autonomous_paper_cycle(
+        run_id=run_id,
+        symbol_universe=cfg.symbols,
+        use_mock=cfg.use_mock,
+        use_llm=cfg.use_llm,
+        capital=cfg.capital,
+        benchmark=cfg.benchmark,
+        execute_paper=False,
+        runs_root=root,
+        proposal_only=True,
+    )
+    store = get_run_store(root=root)
+    agent_context = load_agent_context(run_id, runs_root=root)
+    proposal = store.read_proposal(run_id) or {}
+    return {
+        "intent": "start_build_position",
+        "run_id": run_id,
+        "ok": out.ok,
+        "proposal_summary": proposal.get("proposal_summary") or [],
+        "rebalance_plan": proposal.get("rebalance_plan") or {},
+        "recommendation": (agent_context or {}).get("recommendation") or "defer",
+        "recommendation_reasons": (agent_context or {}).get("recommendation_reasons") or [],
+        "approval_focus": (agent_context or {}).get("approval_focus") or [],
+    }
+
+
+def handle_show_portfolio(*, runs_root: Path | None = None) -> dict[str, Any]:
+    """
+    读取最新 portfolio_after（或 get_latest_portfolio_state），返回组合摘要。
+    """
+    store = get_run_store(root=runs_root)
+    state = store.get_latest_portfolio_state(use_mock=True)
+    if not state:
+        return {"intent": "show_portfolio", "ok": False, "message": "无组合数据", "portfolio": {}}
+    return {
+        "intent": "show_portfolio",
+        "ok": True,
+        "portfolio": {
+            "equity": state.get("equity"),
+            "cash": state.get("cash"),
+            "positions": state.get("positions") or [],
+            "source": state.get("source", ""),
+        },
+    }
+
+
+def handle_review_latest_proposal(*, runs_root: Path | None = None) -> dict[str, Any]:
+    """
+    调用 RunStore.get_latest_pending_approval_run()，返回 proposal、approval_focus、recommendation。
+    """
+    store = get_run_store(root=runs_root)
+    pending = store.get_latest_pending_approval_run()
+    if not pending:
+        return {
+            "intent": "review_latest_proposal",
+            "ok": False,
+            "message": "暂无待审批的调仓建议",
+            "proposal": None,
+            "approval_focus": [],
+            "recommendation": "defer",
+        }
+    run_id = pending.get("run_id", "")
+    proposal = pending.get("proposal") or {}
+    agent_context = load_agent_context(run_id, runs_root=runs_root)
+    return {
+        "intent": "review_latest_proposal",
+        "ok": True,
+        "run_id": run_id,
+        "proposal": proposal,
+        "proposal_summary": proposal.get("proposal_summary") or [],
+        "approval_focus": (agent_context or {}).get("approval_focus") or [],
+        "recommendation": (agent_context or {}).get("recommendation") or "defer",
+        "recommendation_reasons": (agent_context or {}).get("recommendation_reasons") or [],
+    }
+
+
+def handle_approve_execution(
+    *,
+    runs_root: Path | None = None,
+    config: OpenClawAgentConfig | None = None,
+) -> dict[str, Any]:
+    """
+    对最新 pending proposal 写入 approval_decision(approve)，然后执行 execution。
+    """
+    from ai_trading_research_system.pipeline.autonomous_paper_cycle import run_execution_after_approval
+
+    store = get_run_store(root=runs_root)
+    pending = store.get_latest_pending_approval_run()
+    if not pending:
+        return {
+            "intent": "approve_execution",
+            "ok": False,
+            "message": "暂无待确认的提案，请先「开始建仓」或查看「调仓建议」",
+        }
+    run_id = pending.get("run_id", "")
+    ts = datetime.now(timezone.utc).isoformat()
+    store.write_approval_decision(run_id, {
+        "run_id": run_id,
+        "decision": "approve",
+        "parsed_decision": "approve",
+        "normalized_decision": "approve",
+        "reviewer": "user_confirm",
+        "reason": "user_confirm",
+        "timestamp": ts,
+        "raw_agent_output": "approve",
+    })
+    cfg = config or OpenClawAgentConfig()
+    use_mock = cfg.use_mock if cfg else True
+    results = run_execution_after_approval(run_id, store, use_mock=use_mock)
+    return {
+        "intent": "approve_execution",
+        "ok": True,
+        "run_id": run_id,
+        "executed_orders": len([r for r in results if r.get("order_done")]),
+        "trade_count": sum(int(r.get("trade_count", 0)) for r in results),
+        "paper_results": results,
+    }

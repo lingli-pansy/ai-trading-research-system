@@ -292,6 +292,19 @@ class RunStore:
         runs = self.list_runs(limit=1)
         return runs[0] if runs else None
 
+    def get_latest_pending_approval_run(self, limit: int = 20) -> dict[str, Any] | None:
+        """
+        返回最近一条「有 proposal 且尚无 approval_decision」的 run 摘要；
+        供「确认执行」等流程使用。若无则返回 None。
+        """
+        for run_id in self.list_runs(limit=limit):
+            if self.read_proposal(run_id) is None:
+                continue
+            if self.read_approval_decision(run_id) is not None:
+                continue
+            return self.replay_run(run_id)
+        return None
+
     # ---------- Run Index (runs/index.json) ----------
     def _index_path(self) -> Path:
         return self._root / "index.json"
