@@ -25,6 +25,8 @@ class WeeklyReport:
     no_trade_days: int
     no_trade_reasons: list[str]
     next_week_suggestion: str  # 规则化建议
+    # 每日/每轮 Research 产出：分析结论、新闻摘要、盘面指标
+    daily_research: list[dict[str, Any]]  # [{day, symbol, thesis, suggested_action, confidence, key_drivers, news_snippets, price_summary, fundamentals_summary}, ...]
 
 
 class WeeklyReportGenerator:
@@ -39,10 +41,12 @@ class WeeklyReportGenerator:
         risk_events: list[str] | None = None,
         no_trade_days: int = 0,
         no_trade_reasons: list[str] | None = None,
+        daily_research: list[dict[str, Any]] | None = None,
     ) -> WeeklyReport:
         key_trades = key_trades or []
         risk_events = risk_events or []
         no_trade_reasons = no_trade_reasons or []
+        daily_research = daily_research or []
         # 规则化下周建议
         if benchmark_result.excess_return > 0.02:
             suggestion = "组合跑赢基准，可维持当前风险偏好。"
@@ -63,6 +67,7 @@ class WeeklyReportGenerator:
             no_trade_days=no_trade_days,
             no_trade_reasons=no_trade_reasons,
             next_week_suggestion=suggestion,
+            daily_research=daily_research,
         )
 
     def to_dict(self, report: WeeklyReport) -> dict[str, Any]:

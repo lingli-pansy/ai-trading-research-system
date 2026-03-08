@@ -66,6 +66,11 @@ class ResearchOrchestrator:
         )
 
     def run(self, symbol: str) -> DecisionContract:
+        context, contract = self.run_with_context(symbol)
+        return contract
+
+    def run_with_context(self, symbol: str) -> tuple[ResearchContext, DecisionContract]:
+        """Run research and return (context, contract) for reporting (news, price, fundamentals)."""
         context = self.build_context(symbol)
         aggregated: dict = defaultdict(list)
 
@@ -77,4 +82,5 @@ class ResearchOrchestrator:
                 else:
                     aggregated[key] = value
 
-        return self.synthesis.run(context, dict(aggregated))
+        contract = self.synthesis.run(context, dict(aggregated))
+        return context, contract

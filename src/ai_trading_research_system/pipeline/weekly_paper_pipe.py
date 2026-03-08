@@ -75,12 +75,25 @@ def run_weekly_autonomous_paper(
     run_ids: list[int] = []
     key_trades: list[str] = []
     no_trade_reasons: list[str] = []
+    daily_research: list[dict[str, Any]] = []
 
     for day in range(duration_days):
         day_pnl = 0.0
         day_trades = 0
         for sym in symbols:
-            contract = orchestrator.run(sym)
+            context, contract = orchestrator.run_with_context(sym)
+            # 收集本轮分析、新闻、盘面，供周报展示
+            daily_research.append({
+                "day": day,
+                "symbol": sym,
+                "thesis": contract.thesis,
+                "suggested_action": contract.suggested_action,
+                "confidence": contract.confidence,
+                "key_drivers": contract.key_drivers[:5],
+                "news_snippets": context.news_summaries[:5],
+                "price_summary": context.price_summary,
+                "fundamentals_summary": context.fundamentals_summary,
+            })
             signal = translator.translate(contract)
             wait = contract.suggested_action in ("wait_confirmation", "watch", "forbid_trade") or contract.confidence == "low"
             signals = [{"symbol": sym, "size_fraction": signal.allowed_position_size, "rationale": signal.rationale}]
@@ -97,7 +110,7 @@ def run_weekly_autonomous_paper(
             day_trades += result.trade_count
             if result.trade_count > 0:
                 key_trades.append(f"{sym} trades={result.trade_count} pnl={result.pnl:.2f}")
-            # 写 Experience Store（每轮一次 run）
+            # 写 Experience Store（每轮一次 run，extra 含 contract 快照便于回溯）
             start_d = (datetime.now(timezone.utc).date()).isoformat()
             end_d = start_d
             payload = RunResultPayload(
@@ -109,7 +122,15 @@ def run_weekly_autonomous_paper(
                 win_rate=0.0,
                 pnl=result.pnl,
                 trade_count=result.trade_count,
-                extra={"weekly_paper_day": day, "mandate_id": mandate.mandate_id},
+                extra={
+                    "weekly_paper_day": day,
+                    "mandate_id": mandate.mandate_id,
+                    "thesis": contract.thesis,
+                    "suggested_action": contract.suggested_action,
+                    "confidence": contract.confidence,
+                    "news_snippets": context.news_summaries[:3],
+                    "price_summary": context.price_summary,
+                },
                 regime_tag="weekly_paper",
             )
             run_id = write_run_result(payload)
@@ -136,6 +157,7 @@ def run_weekly_autonomous_paper(
         risk_events=[],
         no_trade_days=sum(1 for _ in no_trade_reasons),
         no_trade_reasons=no_trade_reasons[:5],
+        daily_research=daily_research,
     )
     report_dir = report_dir or Path(".")
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -151,6 +173,8 @@ def run_weekly_autonomous_paper(
         "trade_count": total_trades,
         "pnl": total_pnl,
         "report_path": report_path,
+        "daily_research_count": len(daily_research),
+        "analysis_in_report": True,  # 分析结论、新闻摘要、盘面指标见 report_path 内 daily_research
     }
     return WeeklyPaperResult(
         ok=True,

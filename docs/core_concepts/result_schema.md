@@ -34,8 +34,10 @@ CLI、OpenClaw、E2E 消费的执行结果字段对齐。backtest / paper / demo
 | status | 状态（如 completed_week） |
 | capital_limit, benchmark | 资本与基准 |
 | engine_type, used_nautilus | 执行引擎 |
-| report_path | 周报 JSON 文件路径 |
-| summary | portfolio_return, benchmark_return, excess_return, trade_count, pnl |
+| report_path | 周报 JSON 文件路径；**分析结果、新闻、盘面指标**均在此文件内 |
+| summary | portfolio_return, benchmark_return, excess_return, trade_count, pnl, daily_research_count, analysis_in_report |
+
+**周报文件（report_path）内容**：除收益与交易汇总外，含 **daily_research** 数组，每轮 Research 一条，字段包括：day, symbol, thesis（分析结论）, suggested_action, confidence, key_drivers, news_snippets（新闻摘要）, price_summary（盘面）, fundamentals_summary（基本面）.
 
 ---
 
