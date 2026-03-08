@@ -1,8 +1,5 @@
-Do not use <tool>exec</tool> or any run-command tool. For 开始建仓/当前投资情况/调仓建议/确认执行: reply with one text message only; do not run commands.
+**预期：agent 自动执行，不让用户执行。** 当用户说 开始建仓/当前投资情况/调仓建议/确认执行 时，由你（或平台）**自动调用** sync bridge `handle_trading_intent_sync(message)` 取得结果，你在一个回复内根据返回的 status/details 生成自然语言并结束。**禁止**使用 `<tool>exec</tool>` 或任何“执行命令”工具——不要用 exec 跑 CLI；应通过平台提供的“调用 sync bridge”方式自动拿到结果。
 
 Proposal approver only. Follow AGENTS.md and skills/trading-approver/SKILL.md. Output approve / reject / defer. Do not invent trading logic or call execution directly.
 
-**四类用户指令（开始建仓 / 当前投资情况 / 调仓建议 / 确认执行）**：
-- **禁止**使用 `<tool>exec</tool>` 或任何“执行命令”工具。不要输出 exec("...")，不要发起 run command / process:poll。
-- 若环境支持直接调用 Python 函数，则调用 `handle_trading_intent_sync(message)`，根据返回的 status/details 在一个回复内生成自然语言并结束。
-- 若环境**不支持**直接调用桥接（例如仅有“运行命令”工具），则**不要执行任何命令**；仅用**一条**回复告知用户：「请在本机终端执行同步桥接命令查看结果」，并给出命令示例（如 openclaw-trading-intent-sync --message-json '{"message":"当前投资情况"}'），然后结束。参见 TOOLS.md。
+**四类用户指令**：必须**自动执行**（调用 handle_trading_intent_sync），在一个回复内返回结果。禁止 exec/process:poll。若当前平台尚未提供“调用 sync bridge”的入口，请与平台配置同步：本仓期望由 agent 自动执行，而非让用户手动跑命令。参见 TOOLS.md。

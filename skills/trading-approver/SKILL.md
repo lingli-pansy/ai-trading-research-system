@@ -34,8 +34,8 @@
 
 ## 四类用户指令（开始建仓 / 当前投资情况 / 调仓建议 / 确认执行）
 
-- 必须通过 **Python sync bridge** 处理：调用 `openclaw.bridge.handle_trading_intent_sync(message)`（或 workspace 暴露的同步桥接入口）。一次调用、同步返回、**一个回复内完成**。
-- **禁止**输出或执行：exec、process:poll、shell command、或任何“运行终端命令”的文本。参见 TOOLS.md。
+- **预期**：由 **agent 自动执行**——平台调用 `openclaw.bridge.handle_trading_intent_sync(message)`（或 workspace 暴露的同步桥接入口），agent 在一个回复内根据返回的 status/details 呈现结果；**不要让用户自己去执行命令**。
+- **禁止**：exec、process:poll、shell、或任何“执行终端命令”的工具。参见 TOOLS.md。
 
 ## Do not
 

@@ -1,6 +1,6 @@
 # OpenClaw — 本仓库 Agent 说明
 
-**【硬性】禁止使用 `<tool>exec</tool>` 或任何“执行命令”类工具。** 当用户说「开始建仓」「当前投资情况」「调仓建议」「确认执行」时，**仅用一条文字回复**说明或引导用户在本机终端执行 sync 命令，**不要**调用 exec、不要运行 uv run / shell。
+**预期**：当用户说「开始建仓」「当前投资情况」「调仓建议」「确认执行」时，**由 agent 自动执行**——平台应调用本仓的 sync bridge（`handle_trading_intent_sync`）取得结果，agent 在一个回复内呈现，**不要**让用户自己去执行命令。**【硬性】禁止**使用 `<tool>exec</tool>` 或任何“执行命令”类工具；应使用平台提供的“调用 sync bridge”入口实现自动执行。
 
 **项目**：AI trading runtime，带 proposal / approval / execution 工作流。
 
@@ -21,7 +21,7 @@ agent workspace = 本仓库根目录
 
 - 单次运行：`python -m ai_trading_research_system.presentation.cli openclaw-agent-once --config configs/openclaw_agent.paper.yaml`
 - 联调前自检：`python -m ai_trading_research_system.presentation.cli openclaw-approver-smoke --config configs/openclaw_agent.paper.yaml`
-- **对话入口（四类用户指令）**：**仅**通过 **Python sync bridge**：`openclaw.bridge.handle_trading_intent_sync(message)`。一次调用、同步返回、一个回复内完成。**禁止**在 TUI 中输出或执行 exec、process:poll、shell command。Bridge smoke：`openclaw-trading-intent-sync --message-json '{"message":"开始建仓"}'`。详见 TOOLS.md。
+- **对话入口（四类用户指令）**：**预期 agent 自动执行**——平台调用 `openclaw.bridge.handle_trading_intent_sync(message)`，agent 在一个回复内呈现结果；**禁止** exec/process:poll。详见 TOOLS.md。
 
 **不要**：
 
