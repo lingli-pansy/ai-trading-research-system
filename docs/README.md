@@ -14,7 +14,9 @@
 | [uc09_weekly_autonomous_paper.md](uc09_weekly_autonomous_paper.md) | UC-09 周自治 Paper 入口、OpenClaw、验证 |
 | [operations.md](operations.md) | 当前状态、能跑通什么、Mock 与过渡、验证脚本、下一步 |
 
-控制面：CLI / OpenClaw → `application.commands`；OpenClaw 契约见 `src/ai_trading_research_system/openclaw/contract.py`（persona、skills 见同目录 persona.md、skills.md）。`control/` 为兼容层，退场中。
+**治理与变更记录**（控制面/命令面收口结果）：[control_plane_governance_result.md](control_plane_governance_result.md)、[command_surface_governance_result.md](command_surface_governance_result.md)。
+
+控制面：CLI / OpenClaw → `application.command_registry` → `application.commands`。命令元数据 **single source of truth** 为 `openclaw/registry.py`（canonical、aliases、schema、handler_target）；契约与 schema 见 `openclaw/contract.py`；persona、skills 见同目录 persona.md、skills.md。`control/` 已删除。
 
 ---
 

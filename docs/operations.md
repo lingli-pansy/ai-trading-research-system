@@ -2,7 +2,13 @@
 
 面向新协作者：**能跑通什么、mock 与过渡、如何验证与降级**。
 
-**控制面**：CLI 与 OpenClaw 统一走 `application.commands`；OpenClaw 契约见 `openclaw/contract.py`（persona、skills、command contract）。control/ 为兼容层，退场中。
+**控制面**：CLI 与 OpenClaw 统一走 `application.commands`；OpenClaw 契约见 `openclaw/contract.py`（persona、skills、command contract）。control/ 已删除。
+
+**命令面 Single Source of Truth**：`openclaw/registry.py`。所有命令的 canonical 名、aliases、description、input/output schema、example、handler_target、expose_for_openclaw 仅在此维护。`application/command_registry.py` 只从 registry 读取并做 alias→canonical 解析与 handler 绑定；CLI 与 `run_for_openclaw.py` 均不维护命令列表或别名表。
+
+- **Canonical commands**：`research_symbol`、`backtest_symbol`、`run_demo`、`run_paper`、`weekly_autonomous_paper`、`weekly_report`。
+- **Aliases（CLI 子命令名）**：`research`→`research_symbol`，`backtest`→`backtest_symbol`，`demo`→`run_demo`，`paper`→`run_paper`，`weekly-paper`→`weekly_autonomous_paper`；`weekly_report` 无别名。
+- **OpenClaw 暴露**：仅 `expose_for_openclaw=True` 的命令（不含 `run_paper`），见 `registry.get_canonical_commands_for_openclaw()`。
 
 ---
 

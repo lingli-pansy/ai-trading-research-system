@@ -1,16 +1,13 @@
 """
 Verify command_registry: alias → canonical resolution and dispatch.
+All alias/canonical data comes from registry (single source); command_registry only uses resolve/run.
 """
 from __future__ import annotations
 
 import pytest
 
-from ai_trading_research_system.application.command_registry import (
-    resolve,
-    run,
-    ALIASES,
-    CANONICAL_COMMANDS,
-)
+from ai_trading_research_system.application.command_registry import resolve, run
+from ai_trading_research_system.openclaw.registry import get_aliases, get_canonical_commands
 
 
 def test_resolve_research_alias_to_canonical():
@@ -29,9 +26,14 @@ def test_resolve_weekly_paper_alias_to_canonical():
     assert resolve("weekly-paper") == "weekly_autonomous_paper"
 
 
+def test_resolve_paper_alias_to_run_paper():
+    assert resolve("paper") == "run_paper"
+
+
 def test_resolve_canonical_unchanged():
     assert resolve("research_symbol") == "research_symbol"
     assert resolve("weekly_report") == "weekly_report"
+    assert resolve("run_paper") == "run_paper"
 
 
 def test_run_research_alias_dispatches_to_research_symbol():
@@ -54,17 +56,21 @@ def test_unknown_command_raises():
 
 
 def test_aliases_mapping():
-    assert ALIASES["research"] == "research_symbol"
-    assert ALIASES["backtest"] == "backtest_symbol"
-    assert ALIASES["demo"] == "run_demo"
-    assert ALIASES["weekly-paper"] == "weekly_autonomous_paper"
+    aliases = get_aliases()
+    assert aliases["research"] == "research_symbol"
+    assert aliases["backtest"] == "backtest_symbol"
+    assert aliases["demo"] == "run_demo"
+    assert aliases["weekly-paper"] == "weekly_autonomous_paper"
+    assert aliases["paper"] == "run_paper"
 
 
-def test_canonical_commands_include_all_five():
-    assert set(CANONICAL_COMMANDS) >= {
+def test_canonical_commands_include_run_paper():
+    canonicals = get_canonical_commands()
+    assert set(canonicals) >= {
         "research_symbol",
         "backtest_symbol",
         "run_demo",
+        "run_paper",
         "weekly_autonomous_paper",
         "weekly_report",
     }

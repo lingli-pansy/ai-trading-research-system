@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-# --- Supported commands (canonical list) ---
+# --- OpenClaw-exposed commands (must match registry.get_canonical_commands_for_openclaw()) ---
 OPENCLAW_COMMANDS = [
     "research_symbol",
     "backtest_symbol",
@@ -53,6 +53,12 @@ class WeeklyAutonomousPaperInput(CommandInputBase):
 class WeeklyReportInput(CommandInputBase):
     command: str = "weekly_report"
     report_dir: str | None = None
+
+
+class RunPaperInput(CommandInputBase):
+    command: str = "run_paper"
+    symbol: str = "NVDA"
+    once: bool = False
 
 
 # --- Output schemas: success ---
@@ -112,6 +118,16 @@ class WeeklyReportOutput(OpenClawSuccessBase):
     mandate_id: str = ""
     report_path: str | None = None
     summary: dict[str, Any] = Field(default_factory=dict)
+
+
+class RunPaperOutput(OpenClawSuccessBase):
+    command: str = "run_paper"
+    symbol: str = ""
+    paused: bool = False
+    contract_action: str = ""
+    contract_confidence: str = ""
+    signal_action: str = ""
+    message: str = ""
 
 
 # --- Error schema (stderr / failure) ---

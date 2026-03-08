@@ -35,6 +35,13 @@ def test_openclaw_commands_list():
     assert len(OPENCLAW_COMMANDS) == 5
 
 
+def test_openclaw_commands_match_registry():
+    """OPENCLAW_COMMANDS must match registry.get_canonical_commands_for_openclaw() (single source: registry)."""
+    from ai_trading_research_system.openclaw.registry import get_canonical_commands_for_openclaw
+    registry_openclaw = get_canonical_commands_for_openclaw()
+    assert set(OPENCLAW_COMMANDS) == set(registry_openclaw)
+
+
 def test_research_symbol_input_schema():
     inp = ResearchSymbolInput(symbol="AAPL")
     assert inp.command == "research_symbol"

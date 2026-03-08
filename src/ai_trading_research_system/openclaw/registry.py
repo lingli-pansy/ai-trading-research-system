@@ -1,7 +1,7 @@
 """
-OpenClaw skill registry: list_skills() with canonical name, description, input/output schema, example.
-Single source for skill surface; get_skill_names() returns canonical commands only.
-run_for_openclaw uses this only; no hardcoded skill names.
+Command/skill metadata single source of truth.
+All command info: canonical name, aliases, description, input/output schema, example, handler_target, needs_report_dir, expose_for_openclaw.
+Alias → canonical resolution is implemented only here; command_registry and CLI use resolve() from this module.
 """
 from __future__ import annotations
 
@@ -12,72 +12,158 @@ from ai_trading_research_system.openclaw.contract import (
     ResearchSymbolInput,
     BacktestSymbolInput,
     RunDemoInput,
+    RunPaperInput,
     WeeklyAutonomousPaperInput,
     WeeklyReportInput,
     ResearchSymbolOutput,
     BacktestSymbolOutput,
     RunDemoOutput,
+    RunPaperOutput,
     WeeklyAutonomousPaperOutput,
     WeeklyReportOutput,
 )
 
-# Each skill: canonical command = name; input/output from contract.
-_SKILLS: list[dict[str, Any]] = [
+# Full metadata per command. handler_target = application.commands function name.
+_COMMAND_METADATA: list[dict[str, Any]] = [
     {
-        "name": "research_symbol",
+        "canonical": "research_symbol",
+        "aliases": ["research"],
         "description": "对标的做研究，返回 DecisionContract",
-        "canonical_command": "research_symbol",
         "input_schema": ResearchSymbolInput.model_json_schema(),
         "output_schema": ResearchSymbolOutput.model_json_schema(),
         "example": {"command": "research_symbol", "symbol": "NVDA"},
+        "handler_target": "run_research_symbol",
+        "needs_report_dir": False,
+        "expose_for_openclaw": True,
     },
     {
-        "name": "backtest_symbol",
+        "canonical": "backtest_symbol",
+        "aliases": ["backtest"],
         "description": "对标的做研究 + 回测 + 写入 Experience Store",
-        "canonical_command": "backtest_symbol",
         "input_schema": BacktestSymbolInput.model_json_schema(),
         "output_schema": BacktestSymbolOutput.model_json_schema(),
         "example": {"command": "backtest_symbol", "symbol": "NVDA", "start_date": None, "end_date": None},
+        "handler_target": "run_backtest_symbol",
+        "needs_report_dir": False,
+        "expose_for_openclaw": True,
     },
     {
-        "name": "run_demo",
+        "canonical": "run_demo",
+        "aliases": ["demo"],
         "description": "E2E 演示：研究 → 策略 → 回测 → 总结",
-        "canonical_command": "run_demo",
         "input_schema": RunDemoInput.model_json_schema(),
         "output_schema": RunDemoOutput.model_json_schema(),
         "example": {"command": "run_demo", "symbol": "NVDA"},
+        "handler_target": "run_demo",
+        "needs_report_dir": False,
+        "expose_for_openclaw": True,
     },
     {
-        "name": "weekly_autonomous_paper",
+        "canonical": "run_paper",
+        "aliases": ["paper"],
+        "description": "Research → Contract → Paper inject (once or runner)",
+        "input_schema": RunPaperInput.model_json_schema(),
+        "output_schema": RunPaperOutput.model_json_schema(),
+        "example": {"command": "run_paper", "symbol": "NVDA", "once": False},
+        "handler_target": "run_paper",
+        "needs_report_dir": False,
+        "expose_for_openclaw": False,
+    },
+    {
+        "canonical": "weekly_autonomous_paper",
+        "aliases": ["weekly-paper"],
         "description": "UC-09 一周自治 Paper：mandate → snapshot → 多轮 research/allocator/paper → benchmark → 周报",
-        "canonical_command": "weekly_autonomous_paper",
         "input_schema": WeeklyAutonomousPaperInput.model_json_schema(),
         "output_schema": WeeklyAutonomousPaperOutput.model_json_schema(),
         "example": {"command": "weekly_autonomous_paper", "capital": 10000, "benchmark": "SPY", "duration": 5},
+        "handler_target": "run_weekly_autonomous_paper",
+        "needs_report_dir": True,
+        "expose_for_openclaw": True,
     },
     {
-        "name": "weekly_report",
+        "canonical": "weekly_report",
+        "aliases": [],
         "description": "读取已有周报或生成报告摘要；与 UC-09 execution 分离，仅报告",
-        "canonical_command": "weekly_report",
         "input_schema": WeeklyReportInput.model_json_schema(),
         "output_schema": WeeklyReportOutput.model_json_schema(),
         "example": {"command": "weekly_report", "report_dir": None},
+        "handler_target": "run_weekly_report",
+        "needs_report_dir": True,
+        "expose_for_openclaw": True,
     },
 ]
 
+# Built once: alias -> canonical (only place that defines alias resolution)
+_ALIAS_MAP: dict[str, str] = {}
+for _m in _COMMAND_METADATA:
+    for _a in _m["aliases"]:
+        _ALIAS_MAP[_a] = _m["canonical"]
+
+_CANONICAL_BY_TARGET: dict[str, dict[str, Any]] = {_m["canonical"]: _m for _m in _COMMAND_METADATA}
+
+
+def resolve(command: str) -> str:
+    """Resolve alias to canonical. Single implementation; CLI and run_for_openclaw must not duplicate."""
+    return _ALIAS_MAP.get(command, command)
+
+
+def get_all_metadata() -> list[dict[str, Any]]:
+    """All command metadata (single source of truth)."""
+    return list(_COMMAND_METADATA)
+
+
+def get_canonical_commands() -> list[str]:
+    """All canonical command names in registry order."""
+    return [_m["canonical"] for _m in _COMMAND_METADATA]
+
+
+def get_canonical_commands_for_openclaw() -> list[str]:
+    """Canonical commands exposed to OpenClaw (expose_for_openclaw=True)."""
+    return [_m["canonical"] for _m in _COMMAND_METADATA if _m.get("expose_for_openclaw", True)]
+
+
+def get_aliases() -> dict[str, str]:
+    """Alias -> canonical mapping (read-only)."""
+    return dict(_ALIAS_MAP)
+
+
+def get_metadata(canonical: str) -> dict[str, Any] | None:
+    """Metadata for one canonical command, or None."""
+    return _CANONICAL_BY_TARGET.get(canonical)
+
+
+def get_cli_subcommand_names() -> list[str]:
+    """Names to use as CLI subcommands: primary alias if any, else canonical."""
+    out: list[str] = []
+    for _m in _COMMAND_METADATA:
+        out.append(_m["aliases"][0] if _m["aliases"] else _m["canonical"])
+    return out
+
+
+# --- Backward compatibility ---
 
 def list_skills() -> list[dict[str, Any]]:
-    """Return all registered skills: name (= canonical), description, input_schema, output_schema, example."""
-    return list(_SKILLS)
+    """Return skill view: canonical, description, input_schema, output_schema, example (for OpenClaw)."""
+    return [
+        {
+            "name": _m["canonical"],
+            "canonical_command": _m["canonical"],
+            "description": _m["description"],
+            "input_schema": _m["input_schema"],
+            "output_schema": _m["output_schema"],
+            "example": _m["example"],
+        }
+        for _m in _COMMAND_METADATA if _m.get("expose_for_openclaw", True)
+    ]
 
 
 def get_skill_names() -> list[str]:
-    """Return canonical command names only (single source for run_for_openclaw choices)."""
-    return [s["canonical_command"] for s in _SKILLS]
+    """Canonical commands exposed to OpenClaw (same as get_canonical_commands_for_openclaw)."""
+    return get_canonical_commands_for_openclaw()
 
 
 def kwargs_for_task(task: str, args: Any) -> dict[str, Any]:
-    """Build kwargs for command_registry.run(task, **kwargs). task is canonical. report_dir from cwd when needed."""
+    """Build kwargs for command_registry.run(task, **kwargs). task must be canonical."""
     base = {"use_mock": getattr(args, "mock", False), "use_llm": getattr(args, "llm", False)}
     if task == "research_symbol":
         return {**base, "symbol": getattr(args, "symbol", "NVDA")}
@@ -90,6 +176,13 @@ def kwargs_for_task(task: str, args: Any) -> dict[str, Any]:
         }
     if task == "run_demo":
         return {**base, "symbol": getattr(args, "symbol", "NVDA")}
+    if task == "run_paper":
+        return {
+            **base,
+            "symbol": getattr(args, "symbol", "NVDA"),
+            "once": getattr(args, "once", False),
+            "project_root": Path.cwd(),
+        }
     if task == "weekly_autonomous_paper":
         return {
             **base,
