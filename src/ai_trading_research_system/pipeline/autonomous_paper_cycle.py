@@ -24,6 +24,11 @@ from ai_trading_research_system.research.orchestrator import ResearchOrchestrato
 from ai_trading_research_system.research.schemas import DecisionContract, ResearchContext
 from ai_trading_research_system.strategy.translator import ContractTranslator
 from ai_trading_research_system.execution.nautilus_paper_runner import NautilusPaperRunner
+from ai_trading_research_system.risk.policy_engine import (
+    RiskPolicyEngine,
+    RiskCheckResult,
+    plan_to_target_positions,
+)
 from ai_trading_research_system.state.run_store import RunStore, get_run_store
 from ai_trading_research_system.state.schemas import (
     RebalancePlan,
@@ -67,6 +72,7 @@ class CycleOutput:
     trace: list[dict[str, Any]] = field(default_factory=list)
     write_paths: dict[str, str] = field(default_factory=dict)
     error: str = ""
+    risk_flags: list[str] = field(default_factory=list)
 
 
 def _snapshot_to_dict(snap: AccountSnapshot) -> dict[str, Any]:
@@ -473,23 +479,60 @@ def run_autonomous_paper_cycle(
                 rationale = signal.rationale
             signals_for_plan.append({"symbol": o.symbol, "size_fraction": size_fraction, "rationale": rationale, "score": o.score})
         rebalance_plan, order_intents = build_rebalance_plan(snap, alloc_result, signals_for_plan)
+        # 4.5) RiskPolicyEngine: 执行前风险检查，得到 filtered_rebalance_plan 与 risk_flags
+        portfolio_before_dict = _snapshot_to_dict(snap)
+        risk_engine = RiskPolicyEngine()
+        check_result: RiskCheckResult = risk_engine.check(portfolio_before_dict, rebalance_plan.to_dict())
+        audit("risk_check", {"risk_flags": check_result.risk_flags})
+        filtered_plan_dict = check_result.filtered_rebalance_plan
+        filtered_items = filtered_plan_dict.get("items") or []
+        filtered_plan = RebalancePlan(
+            items=[
+                RebalancePlanItem(
+                    symbol=x.get("symbol", ""),
+                    current_position=float(x.get("current_position", 0) or 0),
+                    target_position=float(x.get("target_position", 0) or 0),
+                    delta=float(x.get("delta", 0) or 0),
+                    action_type=x.get("action_type") or "HOLD",
+                    reason=x.get("reason", ""),
+                    confidence=x.get("confidence", "medium"),
+                )
+                for x in filtered_items
+            ],
+            no_trade_reason=filtered_plan_dict.get("no_trade_reason", ""),
+        )
+        filtered_order_intents = [
+            {
+                "symbol": x.symbol,
+                "side": "buy" if x.delta > 0 else "sell",
+                "size_fraction": x.target_position,
+                "delta": x.delta,
+                "action_type": x.action_type,
+                "rationale": x.reason,
+            }
+            for x in filtered_plan.items
+        ]
+        filtered_target_positions = plan_to_target_positions(filtered_plan_dict)
         store.write_artifact(run_id, "final_decision", {
             "no_trade_reason": "",
-            "order_intents": order_intents,
-            "target_positions": alloc_result.target_positions,
+            "order_intents": filtered_order_intents,
+            "target_positions": filtered_target_positions,
             "replacement_decisions": alloc_result.replacement_decisions,
         })
-        store.write_rebalance_plan(run_id, rebalance_plan.to_dict())
-        store.write_artifact(run_id, "order_intents", order_intents)
+        store.write_rebalance_plan(run_id, filtered_plan.to_dict())
+        store.write_artifact(run_id, "order_intents", filtered_order_intents)
         paths["final_decision"] = store.path_for_artifact(run_id, "final_decision")
         paths["order_intents"] = store.path_for_artifact(run_id, "order_intents")
         paths["rebalance_plan"] = store.path_for_artifact(run_id, "rebalance_plan")
-        audit("final_decision", {"order_intents_count": len(order_intents)})
+        audit("final_decision", {"order_intents_count": len(filtered_order_intents), "risk_flags": check_result.risk_flags})
 
-        # 5) execute_paper_orders
+        # 5) execute_paper_orders（使用 filtered target_positions）
+        class _FilteredAlloc:
+            target_positions = filtered_target_positions
+
         paper_results = execute_paper_orders(
             run_id,
-            alloc_result,
+            _FilteredAlloc(),
             contract_by_symbol,
             input_.use_mock,
             input_.execute_paper,
@@ -498,20 +541,21 @@ def run_autonomous_paper_cycle(
             paths["paper_execution"] = store.path_for_execution(run_id)
             audit("paper_execution_done", {"results_count": len(paper_results)})
 
-        # 6) finalize_run
-        finalize_run(run_id, store, _snapshot_to_dict(snap), rebalance_plan, paper_results, paths)
+        # 6) finalize_run（使用 filtered_plan）
+        finalize_run(run_id, store, _snapshot_to_dict(snap), filtered_plan, paper_results, paths)
         paths["portfolio_after"] = store.path_for_snapshot(run_id, "portfolio_after")
 
         return CycleOutput(
             ok=True,
             run_id=run_id,
             candidate_decision=[{"symbol": c.symbol, "action": c.suggested_action, "confidence": c.confidence} for _, _, c in contracts_for_cycle],
-            final_decision={"order_intents": order_intents, "target_positions": alloc_result.target_positions, "rebalance_plan": rebalance_plan.to_dict()},
-            order_intents=order_intents,
-            rebalance_plan=rebalance_plan.to_dict(),
+            final_decision={"order_intents": filtered_order_intents, "target_positions": filtered_target_positions, "rebalance_plan": filtered_plan.to_dict()},
+            order_intents=filtered_order_intents,
+            rebalance_plan=filtered_plan.to_dict(),
             paper_execution_results=paper_results,
             trace=store.read_audit(run_id),
             write_paths=paths,
+            risk_flags=check_result.risk_flags,
         )
     except Exception as e:
         store.append_audit(run_id, {"error": str(e), "phase": "cycle"})

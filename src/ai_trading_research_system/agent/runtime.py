@@ -12,6 +12,13 @@ from typing import Any
 from ai_trading_research_system.application.commands.run_autonomous_paper_cycle import (
     run_autonomous_paper_cycle,
 )
+from ai_trading_research_system.agent.health import (
+    get_health,
+    update_health_success,
+    update_health_error,
+    mark_agent_stopped,
+    should_stop_loop,
+)
 from ai_trading_research_system.state.run_store import get_run_store, RunStore
 from ai_trading_research_system.state.schemas import RunIndexEntry, ExperienceRecord
 
@@ -111,6 +118,11 @@ class AutonomousTradingAgent:
         orders_count = len(out.order_intents) if out.order_intents else 0
         value_after = _portfolio_value(portfolio_after)
         value_before = _portfolio_value(portfolio_before)
+        turnover = sum(abs(x.get("delta", 0) or 0) for x in (rebalance_plan.get("items") or []))
+        position_count = len(portfolio_after.get("positions", [])) if portfolio_after else 0
+        if position_count == 0 and rebalance_plan:
+            position_count = len([x for x in (rebalance_plan.get("items") or []) if (x.get("target_position") or 0) > 0])
+        risk_flags = getattr(out, "risk_flags", None) or []
 
         index_entry = RunIndexEntry(
             run_id=run_id,
@@ -133,6 +145,8 @@ class AutonomousTradingAgent:
         )
         store.append_experience(experience.to_dict())
 
+        if out.ok:
+            update_health_success(store, run_id)
         return {
             "run_id": run_id,
             "ok": out.ok,
@@ -142,12 +156,34 @@ class AutonomousTradingAgent:
             "portfolio_before_value": value_before,
             "portfolio_after_value": value_after,
             "decision_summary": decision_summary,
+            "turnover": turnover,
+            "position_count": position_count,
+            "risk_flags": risk_flags,
         }
 
-    def run_loop(self, interval_seconds: float = 300.0) -> None:
-        """while True: run_once(); sleep(interval_seconds)."""
+    def run_loop(
+        self,
+        interval_seconds: float = 300.0,
+        max_consecutive_failures: int = 5,
+    ) -> None:
+        """
+        while True: try run_once(); on success update health; on exception record error, update health, continue.
+        若连续失败超过 max_consecutive_failures 则停止 loop。
+        """
+        store = self._store_ref()
         while True:
-            self.run_once()
+            try:
+                summary = self.run_once()
+                if summary.get("ok"):
+                    pass  # already updated in run_once
+                else:
+                    update_health_error(store, summary.get("decision_summary") or "run_not_ok")
+            except Exception as e:
+                update_health_error(store, str(e))
+            health = get_health(store)
+            if should_stop_loop(health, max_consecutive_failures=max_consecutive_failures):
+                mark_agent_stopped(store)
+                break
             time.sleep(interval_seconds)
 
 
@@ -167,7 +203,7 @@ def _format_plan_summary(plan: dict[str, Any]) -> list[str]:
 
 def format_run_observability(summary: dict[str, Any]) -> str:
     """
-    单次 run 的可观测输出：run_id, PLAN, EXECUTION, PORTFOLIO VALUE。
+    单次 run 的可观测输出：RUN, PLAN, RISK, EXECUTION, PORTFOLIO。
     供 CLI 或 OpenClaw 直接打印。
     """
     run_id = summary.get("run_id", "")
@@ -175,13 +211,20 @@ def format_run_observability(summary: dict[str, Any]) -> str:
     orders = summary.get("orders_count", 0)
     before = summary.get("portfolio_before_value") or 0
     after = summary.get("portfolio_after_value") or 0
+    turnover = summary.get("turnover", 0)
+    position_count = summary.get("position_count", 0)
+    risk_flags = summary.get("risk_flags") or []
     parts = [
         f"RUN {run_id}",
         "PLAN",
         *([str(x) for x in plan_lines] if plan_lines else ["(no plan)"]),
+        "RISK",
+        f"turnover={turnover:.2f}",
+        f"position_count={position_count}",
+        f"flags={risk_flags!r}",
         "EXECUTION",
         f"{orders} orders",
-        "PORTFOLIO VALUE",
-        f"{before:.0f} → {after:.0f}",
+        "PORTFOLIO",
+        f"value {before:.0f} → {after:.0f}",
     ]
     return "\n".join(parts)

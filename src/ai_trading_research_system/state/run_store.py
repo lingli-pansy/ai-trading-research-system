@@ -24,6 +24,11 @@ def _runs_root() -> Path:
     return Path.cwd() / DEFAULT_RUNS_ROOT
 
 
+def get_runs_root(override: Path | None = None) -> Path:
+    """返回 runs 根目录；供 ExperienceStore 等与 RunStore 共用同一 root。"""
+    return (override or _runs_root()).resolve()
+
+
 def _ensure_dir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
 
@@ -315,6 +320,28 @@ class RunStore:
         line = json.dumps(record, ensure_ascii=False) + "\n"
         with open(path, "a", encoding="utf-8") as f:
             f.write(line)
+
+    # ---------- Agent Health (runs/agent_health.json) ----------
+    def _agent_health_path(self) -> Path:
+        return self._root / "agent_health.json"
+
+    def write_agent_health(self, data: dict[str, Any]) -> None:
+        """写入 runs/agent_health.json。仅通过 RunStore 写，agent 不直接写 runs/。"""
+        _ensure_dir(self._root)
+        path = self._agent_health_path()
+        payload = dict(data)
+        if "updated_at" not in payload:
+            payload["updated_at"] = _iso_now()
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    def read_agent_health(self) -> dict[str, Any] | None:
+        """读取 runs/agent_health.json。"""
+        path = self._agent_health_path()
+        if not path.exists():
+            return None
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
 
     def run_dir(self, run_id: str) -> Path:
         return self._run_dir(run_id)

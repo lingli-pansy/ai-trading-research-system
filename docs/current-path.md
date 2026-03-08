@@ -39,7 +39,8 @@
   - `execution/paper_result.json`  
   - `audit.json`, `meta.json`  
 - **runs/index.json**：运行索引（run_id, timestamp, symbols, decision_summary, portfolio_value, orders），经 `RunStore.append_run_index` / `get_recent_runs` / `get_last_run` 读写。  
-- **runs/experience.jsonl**：经验记录（每行一条 JSON：run_id, timestamp, symbols, rebalance_plan, decision_summary, portfolio_before, portfolio_after），经 `RunStore.append_experience` 追加；仅记录，非学习系统。  
+- **runs/experience.jsonl**：经验记录（每行一条 JSON：run_id, timestamp, symbols, rebalance_plan, decision_summary, portfolio_before, portfolio_after），经 `RunStore.append_experience` 追加；只读查询经 **`state.ExperienceStore`**（get_recent_runs, get_symbol_history, get_recent_rebalances）。  
+- **runs/agent_health.json**：Agent 健康状态（last_success_run, last_error, consecutive_failures, agent_uptime, current_state），经 `RunStore.write_agent_health` / `read_agent_health` 读写。  
 - **reports/**：周报等报告（`weekly_report_*.json`）  
 - 所有 run 读写经 **`state.RunStore`**，禁止 CLI/agent 直接写 runs/ 下文件。  
 
@@ -65,11 +66,20 @@
 - **CLI**：  
   - 单次：`python -m ai_trading_research_system.presentation.cli agent-run-once [--symbols NVDA,SPY] [--capital 10000]`  
   - 循环：`python -m ai_trading_research_system.presentation.cli agent-loop --interval 300 [--symbols NVDA,SPY]`  
-- **可观测输出**：每次 run 打印 RUN id、PLAN（如 SPY ADD 0.05）、EXECUTION（订单数）、PORTFOLIO VALUE（before → after）。
+- **可观测输出**：每次 run 打印 RUN id、PLAN、RISK（turnover, position_count, flags）、EXECUTION、PORTFOLIO（value before → after）。
 
 ---
 
-## 7. 哪些入口是兼容层，不建议新开发依赖？
+## 7. Runtime Stability（运行时安全与稳定性）
+
+- **RiskPolicyEngine**（`risk.policy_engine`）：在 rebalance_plan 执行前做风险检查；约束：max_position_size、max_turnover、max_orders_per_run、min_cash_buffer。输入 portfolio_before + rebalance_plan，输出 filtered_rebalance_plan + risk_flags；违反时自动 trim 或 skip order，并写入 audit。  
+- **Agent Health**（`agent.health`）：状态持久化于 `runs/agent_health.json`（经 RunStore）。run 成功 → 重置 consecutive_failures；run 失败 → consecutive_failures += 1。若连续失败超过阈值（默认 5），agent loop 自动停止（current_state=stopped）。  
+- **Experience Query**：`ExperienceStore.get_recent_runs(n)`、`get_symbol_history(symbol)`、`get_recent_rebalances(symbol)` 供 decision context 与 debug 使用。  
+- **Runtime Error Guard**：`run_loop()` 内 try/except 包裹 `run_once()`；单次异常不终止 agent，记录错误并更新 health 后继续下一轮。
+
+---
+
+## 8. 哪些入口是兼容层，不建议新开发依赖？
 
 - **run_paper**（CLI `paper`）：已复用 autonomous_paper_cycle，保留 CLI 别名与 IBKR 分支；新逻辑应走 paper-cycle / autonomous_paper_cycle。  
 - **scripts/run_*.py**：与 CLI 对应，多为兼容入口；主路径为 `cli paper-cycle` 与 `run_for_openclaw.py autonomous_paper_cycle`。  
