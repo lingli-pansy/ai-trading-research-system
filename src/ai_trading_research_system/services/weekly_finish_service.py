@@ -140,9 +140,30 @@ def finish_week(
     if no_trade_reasons:
         no_trade_explain = "未交易原因：" + "、".join(no_trade_reasons[:5]) + "。"
     summary_line = why_replacements or (no_trade_explain + "本周无调仓或调仓因政策/健康约束未执行。")
+    # UC-10 验证：report 中显式展示 score → allocator decision → action 链条
+    score_to_action_chain = []
+    for t in symbol_traces:
+        sym = t.get("symbol", "")
+        score = t.get("opportunity_score")
+        action = t.get("final_action", "")
+        reason = t.get("no_trade_reason", "")
+        if not sym:
+            continue
+        score_str = f"{score:.2f}" if score is not None else "—"
+        if action == "no_trade" and reason:
+            score_to_action_chain.append(f"{sym}: score={score_str} → {action} ({reason})")
+        else:
+            score_to_action_chain.append(f"{sym}: score={score_str} → {action}")
+    if not score_to_action_chain and opportunity_ranking:
+        for r in (opportunity_ranking or [])[:20]:
+            sym = r.get("symbol", "")
+            s = r.get("score")
+            if sym and s is not None:
+                score_to_action_chain.append(f"{sym}: score={s:.2f} → (见 symbol_traces)")
     decision_traces_summary = {
         "summary": summary_line,
         "why_major_reallocations": "主要调仓源于机会分数差超过策略阈值、且未超过 turnover 与替换次数上限；详见 portfolio_traces / symbol_traces 与 trigger_traces。" if traces_replace else "无替换类决策。",
+        "score_to_action_chain": score_to_action_chain,
         "portfolio_traces": portfolio_traces,
         "symbol_traces": symbol_traces,
         "traces": decision_traces,

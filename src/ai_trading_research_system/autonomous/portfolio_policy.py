@@ -22,8 +22,8 @@ class PortfolioDecisionPolicy:
     """当前持仓分数 >= 此阈值时，视为「可保留」；替换时需满足 min_gap。低于此阈值的持仓更易被替换。"""
     no_trade_if_improvement_small: bool = False
     """若为 True，当潜在改进（分数提升）过小时可不交易（可选，当前仅记录在 rationale）。"""
-    opportunity_score_probe_threshold: float = 0.4
-    """UC-10: 当 confidence>=medium 且 opportunity_score >= 此阈值时，允许 probe position（2–5%）。"""
+    opportunity_score_probe_threshold: float = 0.35
+    """UC-10: 当 confidence>=medium 且 opportunity_score >= 此阈值时，允许 probe position（2–5%）。适度放宽便于验证 score→action。"""
 
     def to_dict(self) -> dict:
         return {
@@ -44,5 +44,5 @@ def default_policy() -> PortfolioDecisionPolicy:
         turnover_budget=0.5,
         retain_threshold=0.0,
         no_trade_if_improvement_small=False,
-        opportunity_score_probe_threshold=0.4,
+        opportunity_score_probe_threshold=0.35,
     )
