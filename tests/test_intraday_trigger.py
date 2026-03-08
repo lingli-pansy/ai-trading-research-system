@@ -43,7 +43,7 @@ def test_drawdown_trigger():
     """drawdown_pct >= threshold 时返回 drawdown_trigger。"""
     snapshot = _snapshot(equity=9_000)
     policy = PortfolioDecisionPolicy(minimum_score_gap_for_replacement=0.3, max_replacements_per_rebalance=2, turnover_budget=0.5)
-    trigger = evaluate_intraday_triggers(
+    trigger, _ = evaluate_intraday_triggers(
         snapshot,
         opportunity_ranking=[{"symbol": "A", "score": 1.0, "risk": "low"}],
         current_positions={},
@@ -60,7 +60,7 @@ def test_drawdown_trigger_via_initial_equity():
     """通过 initial_equity 计算回撤并触发。"""
     snapshot = _snapshot(equity=9_200)  # 8% down from 10k
     policy = PortfolioDecisionPolicy(minimum_score_gap_for_replacement=0.3, max_replacements_per_rebalance=2, turnover_budget=0.5)
-    trigger = evaluate_intraday_triggers(
+    trigger, _ = evaluate_intraday_triggers(
         snapshot,
         opportunity_ranking=[{"symbol": "A", "score": 0.5, "risk": "low"}],
         current_positions={},
@@ -75,7 +75,7 @@ def test_opportunity_spike_trigger():
     """最优机会分数显著高于当前持仓时返回 opportunity_spike_trigger。"""
     snapshot = _snapshot()
     policy = PortfolioDecisionPolicy(minimum_score_gap_for_replacement=0.3, max_replacements_per_rebalance=2, turnover_budget=0.5)
-    trigger = evaluate_intraday_triggers(
+    trigger, _ = evaluate_intraday_triggers(
         snapshot,
         opportunity_ranking=[{"symbol": "NVDA", "score": 2.5, "risk": "low"}],
         current_positions={},
@@ -90,7 +90,7 @@ def test_risk_event_trigger():
     """任一机会 risk=high 时返回 risk_event_trigger。"""
     snapshot = _snapshot()
     policy = PortfolioDecisionPolicy(minimum_score_gap_for_replacement=0.3, max_replacements_per_rebalance=2, turnover_budget=0.5)
-    trigger = evaluate_intraday_triggers(
+    trigger, _ = evaluate_intraday_triggers(
         snapshot,
         opportunity_ranking=[
             {"symbol": "A", "score": 1.0, "risk": "low"},
@@ -120,7 +120,7 @@ def test_health_used_in_trigger_evaluator():
         current_positions=[],
         timestamp="2024-01-01T12:00:00",
     )
-    trigger = evaluate_intraday_triggers(
+    trigger, _ = evaluate_intraday_triggers(
         snapshot,
         opportunity_ranking=[{"symbol": "A", "score": 0.2, "risk": "low"}],
         current_positions={},
@@ -147,7 +147,7 @@ def test_concentration_trigger():
         current_positions=[],
         timestamp="2024-01-01T12:00:00",
     )
-    trigger = evaluate_intraday_triggers(
+    trigger, _ = evaluate_intraday_triggers(
         snapshot,
         opportunity_ranking=[{"symbol": "A", "score": 0.5, "risk": "low"}],
         current_positions={},
@@ -174,7 +174,7 @@ def test_beta_trigger():
         current_positions=[],
         timestamp="2024-01-01T12:00:00",
     )
-    trigger = evaluate_intraday_triggers(
+    trigger, _ = evaluate_intraday_triggers(
         snapshot,
         opportunity_ranking=[{"symbol": "A", "score": 0.5, "risk": "low"}],
         current_positions={},
@@ -201,7 +201,7 @@ def test_excess_drawdown_trigger():
         current_positions=[],
         timestamp="2024-01-01T12:00:00",
     )
-    trigger = evaluate_intraday_triggers(
+    trigger, _ = evaluate_intraday_triggers(
         snapshot,
         opportunity_ranking=[{"symbol": "A", "score": 0.5, "risk": "low"}],
         current_positions={},
@@ -217,7 +217,7 @@ def test_no_adjustment_without_trigger():
     """无回撤、无风险事件、机会分数不够高时返回 None。"""
     snapshot = _snapshot(equity=10_000)
     policy = PortfolioDecisionPolicy(minimum_score_gap_for_replacement=1.0, max_replacements_per_rebalance=2, turnover_budget=0.5)
-    trigger = evaluate_intraday_triggers(
+    trigger, _ = evaluate_intraday_triggers(
         snapshot,
         opportunity_ranking=[{"symbol": "A", "score": 0.2, "risk": "low"}],
         current_positions={},

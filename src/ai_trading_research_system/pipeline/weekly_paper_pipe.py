@@ -102,6 +102,8 @@ def run_weekly_autonomous_paper(
     intraday_adjustments_week: list[dict[str, Any]] = []
     health_based_adjustments_week: list[dict[str, Any]] = []
     portfolio_returns_list: list[float] = []
+    decision_traces_week: list[dict[str, Any]] = []
+    trigger_traces_week: list[dict[str, Any]] = []
 
     spy_trend, vix_level = get_regime_context(use_mock)
     current_positions = {p.get("symbol"): p for p in (snapshot.positions or []) if p.get("symbol")}
@@ -157,7 +159,7 @@ def run_weekly_autonomous_paper(
         health_day = evaluate_portfolio_health(
             snapshot, benchmark_data_day, snapshot.positions or [], initial_equity=capital
         )
-        trigger = evaluate_intraday_triggers(
+        trigger, trigger_trace = evaluate_intraday_triggers(
             snapshot,
             opportunity_ranking_week,
             current_positions,
@@ -165,6 +167,7 @@ def run_weekly_autonomous_paper(
             initial_equity=capital,
             portfolio_health=health_day,
         )
+        trigger_traces_week.append(trigger_trace.to_dict() if hasattr(trigger_trace, "to_dict") else trigger_trace)
         if trigger is None:
             no_trade_reasons.append("no_trigger")
             continue
@@ -184,8 +187,14 @@ def run_weekly_autonomous_paper(
                 health_snapshot_excerpt=health_day.to_dict(),
             )
         alloc_result: AllocationResult = allocator.allocate(
-            snapshot, mandate, signals, wait_confirmation=wait_any, portfolio_health=health_day
+            snapshot,
+            mandate,
+            signals,
+            wait_confirmation=wait_any,
+            portfolio_health=health_day,
+            trigger_context=trigger_trace.to_dict() if hasattr(trigger_trace, "to_dict") else {},
         )
+        decision_traces_week.extend(getattr(alloc_result, "decision_traces", []) or [])
         replacement_decisions_week.extend(alloc_result.replacement_decisions)
         positions_changed = [t.get("symbol") for t in alloc_result.target_positions if t.get("symbol")]
         intraday_adjustments_week.append({
@@ -307,4 +316,6 @@ def run_weekly_autonomous_paper(
         experiment_id=experiment_id or "",
         cycle_number=cycle_number or 0,
         policy_version=policy_version or "",
+        decision_traces=decision_traces_week,
+        trigger_traces=trigger_traces_week,
     )

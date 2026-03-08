@@ -1,11 +1,13 @@
-"""PortfolioAllocator: snapshot + mandate + policy + ranked opportunities -> target_positions, replacements, retained, rejected, rationale."""
+"""PortfolioAllocator: snapshot + mandate + policy + ranked opportunities -> target_positions, replacements, retained, rejected, rationale, decision_traces."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 from ai_trading_research_system.autonomous.schemas import AccountSnapshot, WeeklyTradingMandate
 from ai_trading_research_system.autonomous.portfolio_policy import default_policy
+from ai_trading_research_system.autonomous.decision_trace import DecisionTrace
 
 
 def _health_float(health: Any, key: str) -> float | None:
@@ -31,6 +33,7 @@ class AllocationResult:
     retained_positions: list[dict[str, Any]] = field(default_factory=list)
     rejected_opportunities: list[dict[str, Any]] = field(default_factory=list)
     policy_summary: dict[str, Any] = field(default_factory=dict)
+    decision_traces: list[dict[str, Any]] = field(default_factory=list)
 
 
 class PortfolioAllocator:
@@ -49,7 +52,24 @@ class PortfolioAllocator:
         signals: list[dict[str, Any]] | None = None,
         wait_confirmation: bool = False,
         portfolio_health: Any = None,
+        trigger_context: dict[str, Any] | None = None,
     ) -> AllocationResult:
+        def _now() -> str:
+            return datetime.now(timezone.utc).isoformat()
+
+        def _health_ctx() -> dict[str, Any]:
+            if portfolio_health is None:
+                return {}
+            h = portfolio_health
+            if isinstance(h, dict):
+                return dict(h)
+            return getattr(h, "to_dict", lambda: {})() if hasattr(h, "to_dict") else {}
+
+        def _policy_ctx(p: Any) -> dict[str, Any]:
+            if p is None:
+                return {}
+            return {"minimum_score_gap_for_replacement": getattr(p, "minimum_score_gap_for_replacement", None), "max_replacements_per_rebalance": getattr(p, "max_replacements_per_rebalance", None), "turnover_budget": getattr(p, "turnover_budget", None), "retain_threshold": getattr(p, "retain_threshold", None)}
+
         if wait_confirmation:
             return AllocationResult(
                 target_positions=[],
@@ -57,6 +77,7 @@ class PortfolioAllocator:
                 allocation_rationale="wait_confirmation",
                 no_trade=True,
                 no_trade_reason="wait_confirmation",
+                decision_traces=[DecisionTrace(_now(), "", 0.0, {}, _policy_ctx(getattr(mandate, "policy", None)), trigger_context or {}, "wait_confirmation", "no_trade").to_dict()],
             )
         signals = signals or []
         if not signals:
@@ -66,6 +87,7 @@ class PortfolioAllocator:
                 allocation_rationale="no_signals",
                 no_trade=True,
                 no_trade_reason="no_signals",
+                decision_traces=[DecisionTrace(_now(), "", 0.0, _health_ctx(), _policy_ctx(getattr(mandate, "policy", None)), trigger_context or {}, "no_signals", "no_trade").to_dict()],
             )
 
         policy = getattr(mandate, "policy", None) or default_policy()
@@ -264,6 +286,23 @@ class PortfolioAllocator:
             "rejected_due_to_threshold": replacements_skipped_threshold,
         }
 
+        signal_by_symbol = {s.get("symbol"): s for s in signals if s.get("symbol")}
+        policy_constraints = _policy_ctx(policy)
+        health_context = _health_ctx()
+        tr_ctx = trigger_context or {}
+        decision_traces_list: list[dict[str, Any]] = []
+        for dec in replacement_decisions:
+            sym = dec.get("symbol_in", "")
+            score = float(signal_by_symbol.get(sym, {}).get("score", 0) or 0)
+            reason = dec.get("reason", "replace")
+            decision_traces_list.append(DecisionTrace(_now(), sym, score, health_context, policy_constraints, tr_ctx, reason, "replace").to_dict())
+        for rej in rejected_opportunities:
+            sym = rej.get("symbol", "")
+            score = float(rej.get("score", 0) or 0)
+            reason = rej.get("reason", "rejected")
+            decision_traces_list.append(DecisionTrace(_now(), sym, score, health_context, policy_constraints, tr_ctx, reason, "rejected").to_dict())
+        decision_traces_list.append(DecisionTrace(_now(), "", 0.0, health_context, policy_constraints, tr_ctx, " ".join(rationale_parts), "rebalance" if targets else "no_trade").to_dict())
+
         return AllocationResult(
             target_positions=targets,
             cash_reserve=cash_reserve,
@@ -274,4 +313,5 @@ class PortfolioAllocator:
             retained_positions=retained_positions,
             rejected_opportunities=rejected_opportunities,
             policy_summary=policy_summary,
+            decision_traces=decision_traces_list,
         )

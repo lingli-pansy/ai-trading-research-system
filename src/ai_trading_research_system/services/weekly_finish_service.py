@@ -62,6 +62,8 @@ def finish_week(
     experiment_id: str = "",
     cycle_number: int = 0,
     policy_version: str = "",
+    decision_traces: list[dict[str, Any]] | None = None,
+    trigger_traces: list[dict[str, Any]] | None = None,
 ) -> Any:
     """
     After execution loop: compute benchmark, write report, build summary, return WeeklyPaperResult.
@@ -117,6 +119,15 @@ def finish_week(
     why_replacements = ""
     if replacement_decisions:
         why_replacements = f"因新机会分数差达到策略阈值，执行 {len(replacement_decisions)} 次仓位替换。"
+    decision_traces = decision_traces or []
+    trigger_traces = trigger_traces or []
+    traces_replace = [t for t in decision_traces if t.get("final_action") == "replace"]
+    decision_traces_summary = {
+        "summary": why_replacements or "本周无调仓或调仓因政策/健康约束未执行。",
+        "why_major_reallocations": "主要调仓源于机会分数差超过策略阈值、且未超过 turnover 与替换次数上限；详见 traces 与 trigger_traces。" if traces_replace else "无替换类决策。",
+        "traces": decision_traces,
+        "trigger_traces": trigger_traces,
+    }
     report_path = report_generate_and_write(
         mandate,
         bench_result,
@@ -145,6 +156,7 @@ def finish_week(
         cycle_number=cycle_number or 0,
         policy_version=policy_version or "",
         system_snapshot_at_week_end=system_snapshot_at_week_end,
+        decision_traces_summary=decision_traces_summary,
     )
     if portfolio_health:
         write_portfolio_health_snapshot(mandate_id=mandate.mandate_id, period=period, snapshot=portfolio_health)
