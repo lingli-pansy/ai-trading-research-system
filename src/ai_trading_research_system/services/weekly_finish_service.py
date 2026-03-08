@@ -208,6 +208,16 @@ def finish_week(
         max_drawdown=max_drawdown,
         turnover_pct=turnover_pct,
     )
+    summary["decision_traces_summary"] = decision_traces_summary
+    if experiment_id:
+        from ai_trading_research_system.experience.store import write_decision_traces_snapshot
+        write_decision_traces_snapshot(
+            experiment_id=experiment_id,
+            mandate_id=mandate.mandate_id,
+            period=period,
+            traces=decision_traces,
+            trigger_traces=trigger_traces,
+        )
     return WeeklyPaperResult(
         ok=True,
         mandate_id=mandate.mandate_id,

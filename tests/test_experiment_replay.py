@@ -14,9 +14,13 @@ from ai_trading_research_system.services.replay_service import (
     ResultComparison,
     run_experiment_replay,
     compare_experiment_results,
+    compare_decision_traces,
 )
 from ai_trading_research_system.pipeline.experiment_cycle import run_experiment_cycle
-from ai_trading_research_system.experience.store import read_latest_experiment_cycle
+from ai_trading_research_system.experience.store import (
+    read_latest_experiment_cycle,
+    read_latest_decision_traces_snapshot,
+)
 
 
 def test_experiment_replay_runs():
@@ -145,3 +149,89 @@ def test_weekly_report_replay_analysis_field():
     d = gen.to_dict(report)
     assert "replay_analysis" in d
     assert d["replay_analysis"]["source_experiment_id"] == "exp_1"
+
+
+def test_decision_diff():
+    """compare_decision_traces 输出 position_differences、trigger_differences、policy_constraint_differences。"""
+    original_traces = [
+        {"symbol": "A", "final_action": "replace", "policy_constraints": {"minimum_score_gap_for_replacement": 0.3}},
+        {"symbol": "B", "final_action": "rejected", "policy_constraints": {"minimum_score_gap_for_replacement": 0.3}},
+    ]
+    original_trigger_traces = [
+        {"trigger_fired": True, "trigger_type": "opportunity_spike_trigger", "trigger_reason": "gap_met"},
+    ]
+    replay_traces = [
+        {"symbol": "A", "final_action": "replace", "policy_constraints": {"minimum_score_gap_for_replacement": 0.35}},
+        {"symbol": "C", "final_action": "replace", "policy_constraints": {"minimum_score_gap_for_replacement": 0.35}},
+    ]
+    replay_trigger_traces = [
+        {"trigger_fired": True, "trigger_type": "opportunity_spike_trigger", "trigger_reason": "gap_met"},
+    ]
+    diff = compare_decision_traces(
+        original_traces, original_trigger_traces, replay_traces, replay_trigger_traces
+    )
+    assert "position_differences" in diff
+    assert "trigger_differences" in diff
+    assert "policy_constraint_differences" in diff
+    pd = diff["position_differences"]
+    assert "only_in_replay_replace" in pd
+    assert "C" in pd["only_in_replay_replace"]
+    assert "only_in_original_rejected" in pd
+    assert "B" in pd["only_in_original_rejected"]
+    td = diff["trigger_differences"]
+    assert td["original_fired_count"] == 1
+    assert td["replay_fired_count"] == 1
+    pc = diff["policy_constraint_differences"]
+    assert "original" in pc
+    assert "replay" in pc
+    assert "deltas" in pc
+    assert pc["original"].get("minimum_score_gap_for_replacement") == 0.3
+    assert pc["replay"].get("minimum_score_gap_for_replacement") == 0.35
+    assert "minimum_score_gap_for_replacement" in pc["deltas"]
+
+
+def test_replay_trace_comparison():
+    """Replay 后 replay_result 含 decision_diff_summary；replay comparison 写入 experience store。"""
+    with tempfile.TemporaryDirectory() as td:
+        db_path = Path(td) / "replay.db"
+        report_dir = Path(td)
+        os.environ["EXPERIENCE_DB_PATH"] = str(db_path)
+        try:
+            run_experiment_cycle(
+                "exp_trace_src",
+                cycle_number=1,
+                capital=10_000,
+                duration_days=1,
+                use_mock=True,
+                report_dir=report_dir,
+                symbols=["NVDA"],
+            )
+            snap = read_latest_decision_traces_snapshot(experiment_id="exp_trace_src", db_path=db_path)
+            assert snap is not None, "finish_week 应写入 decision_traces_snapshot"
+
+            replay = run_experiment_replay(
+                "exp_trace_src",
+                duration_days=1,
+                use_mock=True,
+                report_dir=report_dir,
+                symbols=["NVDA"],
+                db_path=db_path,
+            )
+            assert "decision_diff_summary" in replay.replay_result
+            diff = replay.replay_result["decision_diff_summary"]
+            assert "position_differences" in diff or "trigger_differences" in diff or "policy_constraint_differences" in diff
+
+            import sqlite3
+            conn = sqlite3.connect(db_path)
+            cur = conn.execute(
+                "SELECT source_experiment_id, decision_diff_json FROM replay_comparison ORDER BY id DESC LIMIT 1"
+            )
+            row = cur.fetchone()
+            conn.close()
+            assert row is not None
+            assert row[0] == "exp_trace_src"
+            import json
+            decision_diff = json.loads(row[1]) if row[1] else {}
+            assert "position_differences" in decision_diff or "trigger_differences" in decision_diff
+        finally:
+            os.environ.pop("EXPERIENCE_DB_PATH", None)

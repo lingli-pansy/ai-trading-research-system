@@ -140,6 +140,23 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             final_performance TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
+        CREATE TABLE IF NOT EXISTS decision_traces_snapshot (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            experiment_id TEXT NOT NULL,
+            mandate_id TEXT NOT NULL,
+            period TEXT NOT NULL,
+            traces_json TEXT NOT NULL,
+            trigger_traces_json TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS replay_comparison (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_experiment_id TEXT NOT NULL,
+            replay_experiment_id TEXT NOT NULL,
+            result_comparison_json TEXT,
+            decision_diff_json TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
     """)
     # Migration: add policy_snapshot if missing (existing DBs)
     try:
@@ -551,6 +568,104 @@ def read_latest_experiment_cycle(
             "evolution_decision": _parse_json(row[11]),
             "final_performance": _parse_json(row[12]),
         }
+    finally:
+        conn.close()
+
+
+def write_decision_traces_snapshot(
+    experiment_id: str,
+    mandate_id: str,
+    period: str,
+    traces: list[dict[str, Any]],
+    trigger_traces: list[dict[str, Any]],
+    *,
+    db_path: Path | None = None,
+) -> int:
+    """Write one decision_traces_snapshot row for replay comparison. Returns row id."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO decision_traces_snapshot (experiment_id, mandate_id, period, traces_json, trigger_traces_json)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                experiment_id,
+                mandate_id,
+                period,
+                json.dumps(traces, ensure_ascii=False),
+                json.dumps(trigger_traces, ensure_ascii=False),
+            ),
+        )
+        conn.commit()
+        return cur.lastrowid or 0
+    finally:
+        conn.close()
+
+
+def read_latest_decision_traces_snapshot(
+    experiment_id: str | None = None,
+    db_path: Path | None = None,
+) -> dict[str, Any] | None:
+    """Read latest decision_traces_snapshot by experiment_id. Returns traces + trigger_traces or None."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        if experiment_id:
+            cur.execute(
+                """SELECT experiment_id, mandate_id, period, traces_json, trigger_traces_json, created_at
+                   FROM decision_traces_snapshot WHERE experiment_id = ? ORDER BY id DESC LIMIT 1""",
+                (experiment_id,),
+            )
+        else:
+            cur.execute(
+                """SELECT experiment_id, mandate_id, period, traces_json, trigger_traces_json, created_at
+                   FROM decision_traces_snapshot ORDER BY id DESC LIMIT 1""",
+            )
+        row = cur.fetchone()
+        if not row:
+            return None
+        traces = _parse_json(row[3])
+        trigger_traces = _parse_json(row[4])
+        return {
+            "experiment_id": row[0],
+            "mandate_id": row[1],
+            "period": row[2],
+            "traces": traces if isinstance(traces, list) else [],
+            "trigger_traces": trigger_traces if isinstance(trigger_traces, list) else [],
+            "created_at": row[5],
+        }
+    finally:
+        conn.close()
+
+
+def write_replay_comparison(
+    source_experiment_id: str,
+    replay_experiment_id: str,
+    result_comparison: dict[str, Any],
+    decision_diff: dict[str, Any],
+    *,
+    db_path: Path | None = None,
+) -> int:
+    """Write one replay_comparison row. Returns row id."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO replay_comparison (source_experiment_id, replay_experiment_id, result_comparison_json, decision_diff_json)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                source_experiment_id,
+                replay_experiment_id,
+                json.dumps(result_comparison, ensure_ascii=False),
+                json.dumps(decision_diff, ensure_ascii=False),
+            ),
+        )
+        conn.commit()
+        return cur.lastrowid or 0
     finally:
         conn.close()
 
