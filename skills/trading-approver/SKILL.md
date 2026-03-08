@@ -32,8 +32,14 @@
   会跑一次 proposal 生成 → 写 approver_prompt_input.json、approver_user_message.txt → 用 `--raw` 或默认 mock 输出 → 解析为 normalized decision。  
 - **编程**：`openclaw.agent_adapter.approve_proposal(proposal, context)`，context 建议用 `build_approver_prompt_input(load_agent_context(run_id))` 或等价结构；或使用 `openclaw.prompts.build_approver_user_message(prompt_input)` 得到发给 agent 的文本。
 
+## 四类用户指令（开始建仓 / 当前投资情况 / 调仓建议 / 确认执行）
+
+- 必须通过 **Python sync bridge** 处理：调用 `openclaw.bridge.handle_trading_intent_sync(message)`（或 workspace 暴露的同步桥接入口）。一次调用、同步返回、**一个回复内完成**。
+- **禁止**输出或执行：exec、process:poll、shell command、或任何“运行终端命令”的文本。参见 TOOLS.md。
+
 ## Do not
 
 - 绕过 runtime 直接调用 execution。  
 - 在本 skill 内实现新的交易策略或仓位逻辑。  
-- 输出除 approve/reject/defer 以外的决策语义。
+- 输出除 approve/reject/defer 以外的决策语义。  
+- 对上述四类指令使用 exec/poll/shell；仅允许通过 sync bridge。

@@ -1,41 +1,40 @@
-# Trading Agent 工具说明（同步完成式，无 exec/poll）
+# Trading Agent — 同步桥接入口（唯一推荐）
 
-Agent 通过 **Python API** 调用 trading intent dispatcher，不构造 shell / exec / process:poll。一次调用同步返回 `{ status, summary, details }`，在一个响应内完成回复。
+OpenClaw workspace 对本项目的调用**仅**通过 **Python sync bridge** 完成。Agent **不得**输出或触发 exec、process:poll、shell command。
 
-## 用户指令
+## 唯一入口
 
-| 用户说法 | 意图 |
-|----------|------|
-| 开始建仓、建仓、账户建仓 | 开始建仓 |
-| 当前投资情况、组合 | 查看组合 |
-| 调仓建议、最近有没有调仓 | 查看调仓建议 |
-| 确认执行、确认、执行 | 确认并执行 |
+- **Python**：`openclaw.bridge.handle_trading_intent_sync(message, config_path=None)`  
+  内部直接调用 `dispatch_trading_intent`，不经 shell，不拼命令。一次调用，同步返回。
 
-## 调用方式（供 OpenClaw 或脚本）
+- **CLI（仅作 bridge smoke / 联调）**：  
+  `openclaw-trading-intent-sync --message-json '{"message": "开始建仓"}'`  
+  内部直接走 `handle_trading_intent_sync`，不 spawn 子进程。
 
-**推荐：结构化参数，避免转义**
+## 用户指令与 status
 
-```bash
-uv run python -m ai_trading_research_system.presentation.cli openclaw-trading-intent --message-json '{"message": "账户建仓"}'
-```
-
-**或 stdin：**
-
-```bash
-echo '{"message": "账户建仓"}' | uv run python -m ai_trading_research_system.presentation.cli openclaw-trading-intent
-```
-
-可选：`--config configs/openclaw_agent.paper.yaml`，`--timeout 30`（默认 30 秒）。
+| 用户说法       | 意图         | 返回 status 示例           |
+|----------------|--------------|----------------------------|
+| 开始建仓、账户建仓 | 开始建仓     | pending_confirmation       |
+| 当前投资情况、组合 | 查看组合     | ok                         |
+| 调仓建议       | 查看调仓建议 | pending_confirmation / no_proposal |
+| 确认执行、确认、执行 | 确认并执行   | ok / error                 |
 
 ## 返回格式
 
-```json
-{
-  "intent_run_id": "intent_...",
-  "status": "ok | pending_confirmation | no_proposal | error",
-  "summary": "简短说明",
-  "details": { ... }
-}
-```
+每次桥接返回均包含：
 
-- Agent 根据 `status` 生成自然语言；`pending_confirmation` 时展示方案并问「是否确认执行？」；任务明确结束，无 poll。
+- `status`：ok | pending_confirmation | no_proposal | error  
+- `summary`：简短说明（含「本次请求已完成。」）  
+- `details`：结构化数据  
+- `bridge_invoked`：true  
+- `bridge_mode`：sync  
+- `intent`：解析出的意图  
+
+Agent 根据 `status` 与 `details` 在一个回复内生成自然语言，**不得**再发起 exec/poll/shell。
+
+## 禁止（硬性）
+
+- **不得**在回复中写出或触发：`exec(`、`process:poll`、`run(`、`uv run`、任何“执行终端命令”的调用。即：禁止输出类似 `exec("uv run python -m ...")` 的文本或发起此类工具调用。
+- 若当前界面只能“运行命令”，则**不要运行任何命令**；改为在一条回复中说明「请在本机终端运行以下命令」并给出示例（见上方 CLI），然后结束回复。
+- 禁止多轮“先 exec 再 poll”；必须一次回复结束。

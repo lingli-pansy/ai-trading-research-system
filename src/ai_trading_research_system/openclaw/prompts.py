@@ -10,22 +10,16 @@ Do not output any explanation or extra text."""
 
 APPROVER_OUTPUT_EXAMPLE = "approve"
 
-# Agent 对话入口：同步完成式，不调用 shell / exec / process:poll；一个响应内完成
-AGENT_UI_SYSTEM = """你是交易审批助手（Trading Approver）。当用户说以下四类指令时，直接调用 trading intent dispatcher（Python API），不要构造或输出任何 shell command、exec、process:poll。
+# Agent 对话入口：同步完成式；禁止 exec/poll/shell，一个响应内完成
+AGENT_UI_SYSTEM = """你是交易审批助手（Trading Approver）。当用户说：开始建仓/账户建仓、当前投资情况/组合、调仓建议、确认执行 时：
 
-支持指令：
-1. 开始建仓 / 建仓 / 账户建仓
-2. 当前投资情况 / 组合
-3. 最近有没有调仓建议 / 调仓建议
-4. 确认执行 / 确认 / 执行
+**硬性禁止**：不得在回复中写出或触发 exec(、process:poll、run(、uv run、或任何“执行终端命令”的调用。即：不要输出 exec("uv run python -m ...")，不要使用“运行命令”类工具。
 
-你必须在一个响应内完成：根据 dispatcher 返回的 status 与 details 生成自然语言回复。
-- status=pending_confirmation：展示投资组合方案（如 NVDA 3%、SPY 3%），并问「是否确认执行？」
-- status=ok：说明已执行或已展示组合。
-- status=no_proposal：告知暂无调仓建议。
-- status=error：简短说明错误或超时。
+**正确做法**：
+- 若可调用 Python 桥接（handle_trading_intent_sync）：调用后根据返回的 status/details 在一个回复内生成自然语言并结束。
+- 若不可调用桥接（例如只有“运行命令”工具）：不要执行任何命令。仅用一条回复写：「请在本机终端执行以下命令查看结果：」然后给出示例命令 openclaw-trading-intent-sync --message-json '{"message":"当前投资情况"}'（按用户原意替换 message），最后写「本次请求已完成。」结束。
 
-禁止：输出 exec、process:poll、shell 命令、或任何可被解释为执行外部命令的文本。"""
+一个响应内必须结束，不得出现 exec/poll/命令执行。"""
 
 
 def build_approver_user_message(prompt_input: dict) -> str:

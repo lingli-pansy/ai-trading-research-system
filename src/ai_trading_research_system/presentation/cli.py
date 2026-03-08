@@ -125,6 +125,11 @@ def main() -> int:
     p_trading_intent.add_argument("--config", default=None, help="Path to OpenClaw agent config (optional)")
     p_trading_intent.add_argument("--timeout", type=float, default=30, help="Handler timeout seconds (default 30)")
 
+    p_trading_intent_sync = subparsers.add_parser("openclaw-trading-intent-sync", help="Bridge smoke: single sync entry, no subprocess. Uses handle_trading_intent_sync.")
+    p_trading_intent_sync.add_argument("--message-json", required=True, help='JSON with "message" key, e.g. \'{"message": "开始建仓"}\'')
+    p_trading_intent_sync.add_argument("--config", default=None, help="Path to OpenClaw agent config (optional)")
+    p_trading_intent_sync.add_argument("--timeout", type=float, default=30, help="Timeout seconds (default 30)")
+
     p_proposal_run = subparsers.add_parser("proposal-run", help="Generate proposal only (no approval, no execution)")
     p_proposal_run.add_argument("--symbols", default="NVDA", help="Comma-separated symbols (default: NVDA)")
     p_proposal_run.add_argument("--capital", type=float, default=10000, help="Capital (default 10000)")
@@ -255,6 +260,25 @@ def main() -> int:
             config = OpenClawAgentConfig.load(Path(args.config)) if getattr(args, "config", None) else None
             timeout = getattr(args, "timeout", 30) or 30
             out = handle_trading_intent(msg, config=config, timeout_seconds=timeout)
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+        return 0 if out.get("status") != "error" else 1
+
+    if args.command == "openclaw-trading-intent-sync":
+        from ai_trading_research_system.openclaw.bridge import handle_trading_intent_sync
+        msg = ""
+        try:
+            payload = json.loads(getattr(args, "message_json", "") or "{}")
+            msg = (payload.get("message") or "").strip() if isinstance(payload, dict) else ""
+        except (TypeError, ValueError):
+            pass
+        if not msg:
+            out = {"status": "error", "summary": "missing message", "details": {}, "bridge_invoked": True, "bridge_mode": "sync"}
+        else:
+            out = handle_trading_intent_sync(
+                msg,
+                config_path=getattr(args, "config", None),
+                timeout_seconds=getattr(args, "timeout", 30) or 30,
+            )
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return 0 if out.get("status") != "error" else 1
 

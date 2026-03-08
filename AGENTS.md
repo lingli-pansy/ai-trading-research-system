@@ -19,7 +19,7 @@ agent workspace = 本仓库根目录
 
 - 单次运行：`python -m ai_trading_research_system.presentation.cli openclaw-agent-once --config configs/openclaw_agent.paper.yaml`
 - 联调前自检：`python -m ai_trading_research_system.presentation.cli openclaw-approver-smoke --config configs/openclaw_agent.paper.yaml`
-- **对话入口（四类用户指令，同步完成式）**：`openclaw-trading-intent --message-json '{"message":"..."}'` 或 stdin；内部调用 `handle_trading_intent(message)`，返回 `{ status, summary, details }`，无 exec/poll。详见 TOOLS.md。
+- **对话入口（四类用户指令）**：**仅**通过 **Python sync bridge**：`openclaw.bridge.handle_trading_intent_sync(message)`。一次调用、同步返回、一个回复内完成。**禁止**在 TUI 中输出或执行 exec、process:poll、shell command。Bridge smoke：`openclaw-trading-intent-sync --message-json '{"message":"开始建仓"}'`。详见 TOOLS.md。
 
 **不要**：
 
