@@ -13,7 +13,7 @@ from ai_trading_research_system.services.report_service import (
     generate_and_write as report_generate_and_write,
     build_weekly_result_summary,
 )
-from ai_trading_research_system.experience.store import write_weekly_portfolio_experience
+from ai_trading_research_system.experience.store import write_weekly_portfolio_experience, write_portfolio_health_snapshot
 
 # Avoid circular import: pipe defines WeeklyPaperResult
 def _result_type():
@@ -45,6 +45,7 @@ def finish_week(
     rejected_opportunities: list[dict[str, Any]] | None = None,
     policy_summary: dict[str, Any] | None = None,
     intraday_adjustments: list[dict[str, Any]] | None = None,
+    portfolio_health: dict[str, Any] | None = None,
 ) -> Any:
     """
     After execution loop: compute benchmark, write report, build summary, return WeeklyPaperResult.
@@ -89,8 +90,11 @@ def finish_week(
         + policy_summary.get("rejected_due_to_threshold", 0),
         replacements_skipped_due_to_budget=policy_summary.get("replacements_skipped_due_to_budget", 0),
         intraday_adjustments=intraday_adjustments or [],
+        portfolio_health=portfolio_health or {},
     )
     period = f"day_0_to_{duration_days}"
+    if portfolio_health:
+        write_portfolio_health_snapshot(mandate_id=mandate.mandate_id, period=period, snapshot=portfolio_health)
     policy_obj = getattr(mandate, "policy", None)
     experience_policy = {
         "score_gap_used": policy_summary.get("score_gap_used"),

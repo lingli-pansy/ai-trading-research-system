@@ -37,6 +37,7 @@ class WeeklyReport:
     replacements_skipped_due_to_budget: int = 0
     policy_used: dict[str, Any] = field(default_factory=dict)  # minimum_score_gap, max_replacements, turnover_budget
     intraday_adjustments: list[dict[str, Any]] = field(default_factory=list)  # trigger_type, positions_changed, rationale
+    portfolio_health: dict[str, Any] = field(default_factory=dict)  # volatility, beta_vs_spy, concentration, drawdown
 
 
 class WeeklyReportGenerator:
@@ -61,6 +62,7 @@ class WeeklyReportGenerator:
         replacements_skipped_due_to_budget: int = 0,
         policy_used: dict[str, Any] | None = None,
         intraday_adjustments: list[dict[str, Any]] | None = None,
+        portfolio_health: dict[str, Any] | None = None,
     ) -> WeeklyReport:
         key_trades = key_trades or []
         risk_events = risk_events or []
@@ -78,6 +80,7 @@ class WeeklyReportGenerator:
             }
         policy_used = policy_used or {}
         intraday_adjustments = intraday_adjustments or []
+        portfolio_health = portfolio_health or {}
         if benchmark_result.excess_return > 0.02:
             suggestion = "组合跑赢基准，可维持当前风险偏好。"
         elif benchmark_result.trade_count == 0:
@@ -108,6 +111,7 @@ class WeeklyReportGenerator:
             replacements_skipped_due_to_budget=replacements_skipped_due_to_budget,
             policy_used=policy_used,
             intraday_adjustments=intraday_adjustments,
+            portfolio_health=portfolio_health,
         )
 
     def to_dict(self, report: WeeklyReport) -> dict[str, Any]:

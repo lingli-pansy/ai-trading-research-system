@@ -24,7 +24,9 @@ from ai_trading_research_system.execution.nautilus_paper_runner import NautilusP
 from ai_trading_research_system.services.experience_service import write_weekly_run
 from ai_trading_research_system.services.weekly_finish_service import finish_week
 from ai_trading_research_system.services.regime_context import get_regime_context
+from ai_trading_research_system.services.benchmark_service import get_benchmark_return
 from ai_trading_research_system.experience.store import write_intraday_trigger_event
+from ai_trading_research_system.autonomous.portfolio_health import evaluate_portfolio_health
 
 
 @dataclass
@@ -205,6 +207,14 @@ def run_weekly_autonomous_paper(
     sm.complete_week()
     report_dir = report_dir or Path(".")
     turnover_pct = min(100.0, 10.0 * total_trades) if total_trades else 0.0
+    benchmark_return_week, _ = get_benchmark_return(symbol=benchmark, lookback_days=duration_days)
+    health = evaluate_portfolio_health(
+        snapshot,
+        {"benchmark_return": benchmark_return_week, "max_drawdown": 0.0},
+        snapshot.positions or [],
+        initial_equity=capital,
+    )
+    portfolio_health = health.to_dict()
     return finish_week(
         mandate=mandate,
         capital=capital,
@@ -228,4 +238,5 @@ def run_weekly_autonomous_paper(
         rejected_opportunities=rejected_opportunities_week,
         policy_summary=policy_summary_week,
         intraday_adjustments=intraday_adjustments_week,
+        portfolio_health=portfolio_health,
     )

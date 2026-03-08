@@ -84,6 +84,13 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             positions_changed TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
+        CREATE TABLE IF NOT EXISTS portfolio_health_snapshot (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mandate_id TEXT NOT NULL,
+            period TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
     """)
     # Migration: add policy_snapshot if missing (existing DBs)
     try:
@@ -119,6 +126,30 @@ def write_intraday_trigger_event(
                 severity,
                 json.dumps(positions_changed or [], ensure_ascii=False),
             ),
+        )
+        conn.commit()
+        return cur.lastrowid or 0
+    finally:
+        conn.close()
+
+
+def write_portfolio_health_snapshot(
+    mandate_id: str,
+    period: str,
+    snapshot: dict[str, Any],
+    *,
+    db_path: Path | None = None,
+) -> int:
+    """Write one portfolio_health_snapshot row. snapshot = PortfolioHealthSnapshot.to_dict(). Returns row id."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO portfolio_health_snapshot (mandate_id, period, snapshot_json)
+            VALUES (?, ?, ?)
+            """,
+            (mandate_id, period, json.dumps(snapshot, ensure_ascii=False)),
         )
         conn.commit()
         return cur.lastrowid or 0

@@ -32,6 +32,7 @@ def generate_and_write(
     replacements_skipped_due_to_budget: int = 0,
     policy_used: dict[str, Any] | None = None,
     intraday_adjustments: list[dict[str, Any]] | None = None,
+    portfolio_health: dict[str, Any] | None = None,
 ) -> str:
     """Generate weekly report and write to report_dir/weekly_report_{mandate_id}.json. Returns path."""
     if policy_used is None and getattr(mandate, "policy", None) is not None:
@@ -60,6 +61,7 @@ def generate_and_write(
         replacements_skipped_due_to_budget=replacements_skipped_due_to_budget,
         policy_used=policy_used,
         intraday_adjustments=intraday_adjustments or [],
+        portfolio_health=portfolio_health or {},
     )
     report_dir = report_dir or Path(".")
     report_dir.mkdir(parents=True, exist_ok=True)
