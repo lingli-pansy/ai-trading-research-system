@@ -1,4 +1,10 @@
-# 文档索引
+# 历史文档（archive）
+
+**当前有效文档在上一级**：见 [../README.md](../README.md)，仅保留 [current-path.md](../current-path.md)、[system_architecture.md](../system_architecture.md)、[operations.md](../operations.md)、[core_concepts.md](../core_concepts.md)。本目录为历史与过程文档，**不再维护**，仅作参考。
+
+---
+
+# 文档索引（历史）
 
 开发前建议按以下顺序阅读，便于直接进入开发阶段。
 

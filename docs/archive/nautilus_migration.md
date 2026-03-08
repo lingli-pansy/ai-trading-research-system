@@ -24,4 +24,4 @@
 
 ## 参考
 
-Paper 与执行流水线见 [../execution_pipeline.md](../execution_pipeline.md)。
+Paper 与执行流水线见 [execution_pipeline.md](execution_pipeline.md)。

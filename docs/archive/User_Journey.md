@@ -31,7 +31,7 @@
 - **UC-01**：`python cli.py demo NVDA --mock` → 四块输出（研究结论、策略生成、回测结果、交易总结）；流程：Research → DecisionContract → Strategy → Backtest → ExperienceStore → Summary。
 - **UC-04**：`python cli.py backtest NVDA` → Research → Contract → Strategy → NautilusTrader Backtest → ExperienceStore；输出见 **ResultSchema**。
 - **UC-06**：CLI 或 `run_for_openclaw.py`；报告格式见 [../core_concepts.md](../core_concepts.md)。
-- **UC-09**：周级别自治——从用户 Mandate 到一周内自主研究→策略→执行→benchmark→周报→经验沉淀；当前实现见 [../uc09_weekly_autonomous_paper.md](../uc09_weekly_autonomous_paper.md)。
+- **UC-09**：周级别自治——从用户 Mandate 到一周内自主研究→策略→执行→benchmark→周报→经验沉淀；当前实现见 [uc09_weekly_autonomous_paper.md](uc09_weekly_autonomous_paper.md)。
 
 ---
 

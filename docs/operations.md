@@ -21,7 +21,7 @@
 - **Backtest**：`python cli.py backtest [SYMBOL] [--start] [--end] [--mock] [--llm]`，Research → 回测 → ExperienceStore。
 - **Paper**：`python cli.py paper [--symbol SYMBOL] [--once] [--mock] [--llm]`，默认 Nautilus 短窗口；或配置 IBKR_* 走 TWS。
 - **OpenClaw**：`python cli.py research NVDA --mock` 或 `scripts/run_for_openclaw.py`，stdout 单条 JSON。
-- **UC-09 Weekly Autonomous Paper**：默认走真实路径。`python cli.py weekly-paper --capital 10000 --benchmark SPY` 或 `python scripts/run_weekly_autonomous_paper.py --capital 10000 --benchmark SPY`；仅加 `--mock` 时走 mock。见 [uc09_weekly_autonomous_paper.md](uc09_weekly_autonomous_paper.md)。
+- **UC-09 Weekly Autonomous Paper**：默认走真实路径。`python cli.py weekly-paper --capital 10000 --benchmark SPY` 或 `python scripts/run_weekly_autonomous_paper.py ...`；仅加 `--mock` 时走 mock。详见 [current-path.md](current-path.md)。
 - **UC-09 验证**：`.venv/bin/python scripts/verify_uc09_mock.py`（回归）、`.venv/bin/python scripts/verify_uc09_real.py`（真实联调）。
 - **E2E**：`python scripts/run_e2e_check.py NVDA --mock`；**调度**：`python scripts/run_scheduled.py [--once]`。
 

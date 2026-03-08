@@ -49,7 +49,7 @@ Execution Engine
 2. **前置检查**：`python scripts/check_dev_prerequisites.py`。
 3. **Demo**：`python cli.py demo NVDA --mock`，可见四块：研究结论、策略生成、回测结果、交易总结；输出中会标明「执行引擎: NautilusTrader」。
 4. **E2E 校验**：`python scripts/run_e2e_check.py NVDA --mock`，校验 Pipeline 跑通且 Experience Store 有写入。
-5. **OpenClaw 调用示例**：`python cli.py research NVDA --mock` 或 `python scripts/run_for_openclaw.py research NVDA --mock`，stdout 为单条 JSON；完整报告见 [docs/core_concepts.md](docs/core_concepts.md) 与 [docs/uc09_weekly_autonomous_paper.md](docs/uc09_weekly_autonomous_paper.md)。
+5. **OpenClaw 调用示例**：`python cli.py research NVDA --mock` 或 `python scripts/run_for_openclaw.py autonomous_paper_cycle NVDA --mock`，stdout 为单条 JSON；详见 [docs/current-path.md](docs/current-path.md)、[docs/operations.md](docs/operations.md)。
 
 **可选**：`python cli.py research NVDA --mock` 查看 Contract JSON；使用真实数据或 LLM 见下方命令示例。
 
@@ -77,7 +77,7 @@ python cli.py demo NVDA --llm
 
 ## 统一 CLI（Phase 2 推荐入口）
 
-**一句命令跑通**：`python cli.py demo NVDA` 可看到研究结论、策略生成、回测结果、交易总结四块输出。CLI 与 OpenClaw Skill 打通，见 [docs/uc09_weekly_autonomous_paper.md](docs/uc09_weekly_autonomous_paper.md) 与 [docs/operations.md](docs/operations.md)。
+**一句命令跑通**：`python cli.py demo NVDA` 或 `python cli.py paper-cycle --symbols NVDA --mock`。CLI 与 OpenClaw 见 [docs/current-path.md](docs/current-path.md)、[docs/operations.md](docs/operations.md)。
 
 | 子命令 | 用法 | 说明 |
 |--------|------|------|
@@ -96,8 +96,8 @@ python cli.py research NVDA --mock
 # 或：python scripts/run_for_openclaw.py research NVDA --mock
 ```
 
-- **输出**：stdout 为单条 JSON（含 task、symbol、contract_action、contract_confidence、thesis_snippet、raw_contract 等）。完整字段见 [docs/uc09_weekly_autonomous_paper.md](docs/uc09_weekly_autonomous_paper.md) 与 [docs/operations.md](docs/operations.md)。
-- **验证**：退出码 0 即成功；可 pipe 到 `jq` 或 Python 解析。Skill 调用方式与报告格式见 [docs/core_concepts.md](docs/core_concepts.md)。
+- **输出**：stdout 为单条 JSON（含 task、run_id、rebalance_plan、order_intents 等）。字段与 Skill 调用见 [docs/current-path.md](docs/current-path.md)、[docs/operations.md](docs/operations.md)。
+- **验证**：退出码 0 即成功；可 pipe 到 `jq` 解析。
 
 ## 脚本用法（兼容 / 高级）
 
@@ -121,24 +121,23 @@ python cli.py research NVDA --mock
 
 ## 文档（开发入口）
 
-所有文档在 `docs/` 下，**入口为 [docs/README.md](docs/README.md)**；历史文档在 `docs/archive/`。
+文档在 `docs/` 下，**入口 [docs/README.md](docs/README.md)** 仅列核心 4 篇；过程与历史在 [docs/archive/](docs/archive/)。
 
 | 文档 | 说明 |
 |------|------|
-| [docs/README.md](docs/README.md) | **文档入口** |
-| [docs/operations.md](docs/operations.md) | **当前状态总表**：能跑通什么、mock、过渡层、下一步 |
-| [docs/system_architecture.md](docs/system_architecture.md) | 目标架构总览 |
-| [docs/core_concepts.md](docs/core_concepts.md) | ResultSchema、DecisionContract、StrategySpec、Experience Store |
-| [docs/uc09_weekly_autonomous_paper.md](docs/uc09_weekly_autonomous_paper.md) | UC-09 周自治 Paper |
-| [docs/execution_pipeline.md](docs/execution_pipeline.md) | 执行流水线（Backtest/Paper/Live） |
-| [docs/archive/](docs/archive/) | 历史文档（restructuring_plan、mvp_plan、live_readiness_checklist、PRD 等） |
+| [docs/README.md](docs/README.md) | **文档入口**（仅列核心） |
+| [docs/current-path.md](docs/current-path.md) | **当前路径**：主入口、OpenClaw、paper、replay |
+| [docs/system_architecture.md](docs/system_architecture.md) | 目标架构、数据落盘 |
+| [docs/operations.md](docs/operations.md) | 能跑通什么、mock、验证、报告位置 |
+| [docs/core_concepts.md](docs/core_concepts.md) | DecisionContract、StrategySpec、Experience Store |
+| [docs/archive/](docs/archive/) | 历史与过程文档（不再维护） |
 
 ## 目录结构
 
 ```text
 ai-trading-research-system/
 ├── cli.py                 # Phase 2：统一 CLI 入口（research / backtest / paper / demo）
-├── docs/                  # 入口 docs/README.md；核心文档 system_architecture、core_concepts、execution_pipeline、uc09、operations；archive/
+├── docs/                  # 入口 docs/README.md；核心 current-path、system_architecture、operations、core_concepts；archive/ 为历史
 ├── scripts/
 ├── src/
 │   └── ai_trading_research_system/
