@@ -74,12 +74,56 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             policy_snapshot TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
+        CREATE TABLE IF NOT EXISTS intraday_trigger_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mandate_id TEXT NOT NULL,
+            period TEXT NOT NULL,
+            trigger_type TEXT NOT NULL,
+            trigger_reason TEXT,
+            severity TEXT,
+            positions_changed TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
     """)
     # Migration: add policy_snapshot if missing (existing DBs)
     try:
         conn.execute("ALTER TABLE weekly_portfolio_experience ADD COLUMN policy_snapshot TEXT")
     except sqlite3.OperationalError:
         pass
+
+
+def write_intraday_trigger_event(
+    mandate_id: str,
+    period: str,
+    trigger_type: str,
+    trigger_reason: str,
+    severity: str,
+    *,
+    positions_changed: list[str] | None = None,
+    db_path: Path | None = None,
+) -> int:
+    """Write one intraday_trigger_events row. Returns row id."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO intraday_trigger_events (mandate_id, period, trigger_type, trigger_reason, severity, positions_changed)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                mandate_id,
+                period,
+                trigger_type,
+                trigger_reason,
+                severity,
+                json.dumps(positions_changed or [], ensure_ascii=False),
+            ),
+        )
+        conn.commit()
+        return cur.lastrowid or 0
+    finally:
+        conn.close()
 
 
 def get_connection(db_path: Path | None = None) -> sqlite3.Connection:

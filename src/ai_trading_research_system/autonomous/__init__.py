@@ -8,6 +8,8 @@ from ai_trading_research_system.autonomous.portfolio_policy import PortfolioDeci
 from ai_trading_research_system.autonomous.state_machine import AutonomousExecutionStateMachine
 from ai_trading_research_system.autonomous.benchmark import BenchmarkComparator, BenchmarkResult
 from ai_trading_research_system.autonomous.weekly_report import WeeklyReportGenerator, WeeklyReport
+from ai_trading_research_system.autonomous.adjustment_trigger import AdjustmentTrigger, TRIGGER_DRAWDOWN, TRIGGER_OPPORTUNITY_SPIKE, TRIGGER_RISK_EVENT
+from ai_trading_research_system.autonomous.trigger_evaluator import evaluate_intraday_triggers
 
 __all__ = [
     "AccountSnapshot", "WeeklyTradingMandate", "get_account_snapshot",
@@ -15,4 +17,6 @@ __all__ = [
     "OpportunityRanking", "OpportunityScore", "PortfolioDecisionPolicy", "default_policy",
     "AutonomousExecutionStateMachine", "BenchmarkComparator", "BenchmarkResult",
     "WeeklyReportGenerator", "WeeklyReport",
+    "AdjustmentTrigger", "TRIGGER_DRAWDOWN", "TRIGGER_OPPORTUNITY_SPIKE", "TRIGGER_RISK_EVENT",
+    "evaluate_intraday_triggers",
 ]

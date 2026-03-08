@@ -17,12 +17,14 @@ from ai_trading_research_system.autonomous import (
 )
 from ai_trading_research_system.autonomous.schemas import WeeklyTradingMandate, AccountSnapshot
 from ai_trading_research_system.autonomous.opportunity_ranking import OpportunityRanking, OpportunityScore
+from ai_trading_research_system.autonomous.trigger_evaluator import evaluate_intraday_triggers
 from ai_trading_research_system.research.orchestrator import ResearchOrchestrator
 from ai_trading_research_system.strategy.translator import ContractTranslator
 from ai_trading_research_system.execution.nautilus_paper_runner import NautilusPaperRunner
 from ai_trading_research_system.services.experience_service import write_weekly_run
 from ai_trading_research_system.services.weekly_finish_service import finish_week
 from ai_trading_research_system.services.regime_context import get_regime_context
+from ai_trading_research_system.experience.store import write_intraday_trigger_event
 
 
 @dataclass
@@ -80,6 +82,7 @@ def run_weekly_autonomous_paper(
     retained_positions_week: list[dict[str, Any]] = []
     rejected_opportunities_week: list[dict[str, Any]] = []
     policy_summary_week: dict[str, Any] = {}
+    intraday_adjustments_week: list[dict[str, Any]] = []
 
     spy_trend, vix_level = get_regime_context(use_mock)
     current_positions = {p.get("symbol"): p for p in (snapshot.positions or []) if p.get("symbol")}
@@ -118,9 +121,33 @@ def run_weekly_autonomous_paper(
                 "rationale": signal.rationale,
                 "score": o.score,
             })
-        alloc_result: AllocationResult = allocator.allocate(snapshot, mandate, signals, wait_confirmation=wait_any)
         opportunity_ranking_week = [{"symbol": o.symbol, "score": o.score, "confidence": o.confidence, "risk": o.risk} for o in ranked]
+        trigger = evaluate_intraday_triggers(
+            snapshot,
+            opportunity_ranking_week,
+            current_positions,
+            mandate.policy,
+            initial_equity=capital,
+        )
+        if trigger is None:
+            no_trade_reasons.append("no_trigger")
+            continue
+        alloc_result: AllocationResult = allocator.allocate(snapshot, mandate, signals, wait_confirmation=wait_any)
         replacement_decisions_week.extend(alloc_result.replacement_decisions)
+        positions_changed = [t.get("symbol") for t in alloc_result.target_positions if t.get("symbol")]
+        intraday_adjustments_week.append({
+            "trigger_type": trigger.trigger_type,
+            "positions_changed": positions_changed,
+            "rationale": trigger.trigger_reason,
+        })
+        write_intraday_trigger_event(
+            mandate_id=mandate.mandate_id,
+            period=f"day_{day}",
+            trigger_type=trigger.trigger_type,
+            trigger_reason=trigger.trigger_reason,
+            severity=trigger.severity,
+            positions_changed=positions_changed,
+        )
         retained_positions_week.extend(alloc_result.retained_positions)
         rejected_opportunities_week.extend(alloc_result.rejected_opportunities)
         ps = alloc_result.policy_summary
@@ -200,4 +227,5 @@ def run_weekly_autonomous_paper(
         retained_positions=retained_positions_week,
         rejected_opportunities=rejected_opportunities_week,
         policy_summary=policy_summary_week,
+        intraday_adjustments=intraday_adjustments_week,
     )

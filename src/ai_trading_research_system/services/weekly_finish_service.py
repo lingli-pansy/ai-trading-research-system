@@ -44,6 +44,7 @@ def finish_week(
     retained_positions: list[dict[str, Any]] | None = None,
     rejected_opportunities: list[dict[str, Any]] | None = None,
     policy_summary: dict[str, Any] | None = None,
+    intraday_adjustments: list[dict[str, Any]] | None = None,
 ) -> Any:
     """
     After execution loop: compute benchmark, write report, build summary, return WeeklyPaperResult.
@@ -87,6 +88,7 @@ def finish_week(
         replacements_skipped_due_to_threshold=policy_summary.get("replacements_skipped_due_to_threshold", 0)
         + policy_summary.get("rejected_due_to_threshold", 0),
         replacements_skipped_due_to_budget=policy_summary.get("replacements_skipped_due_to_budget", 0),
+        intraday_adjustments=intraday_adjustments or [],
     )
     period = f"day_0_to_{duration_days}"
     policy_obj = getattr(mandate, "policy", None)
