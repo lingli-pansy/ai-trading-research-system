@@ -138,6 +138,14 @@ class AutonomousTradingAgent:
             position_count = len([x for x in (rebalance_plan.get("items") or []) if (x.get("target_position") or 0) > 0])
         risk_flags = getattr(out, "risk_flags", None) or []
         approval_decision = getattr(out, "approval_decision", "") or ""
+        opportunity_ranking = store.read_artifact(run_id, "opportunity_ranking")
+        top_opportunities_lines: list[str] = []
+        if isinstance(opportunity_ranking, dict) and "symbols" in opportunity_ranking:
+            for s in opportunity_ranking["symbols"]:
+                sym = s.get("symbol", "")
+                score = s.get("research_score", 0)
+                dec = s.get("allocator_decision", "skip")
+                top_opportunities_lines.append(f"{sym} score={score} {dec}")
 
         index_entry = RunIndexEntry(
             run_id=run_id,
@@ -180,6 +188,7 @@ class AutonomousTradingAgent:
             "position_count": position_count,
             "risk_flags": risk_flags,
             "approval_decision": approval_decision,
+            "top_opportunities_lines": top_opportunities_lines,
         }
 
     def run_loop(
@@ -251,8 +260,11 @@ def format_run_observability(summary: dict[str, Any]) -> str:
     position_count = summary.get("position_count", 0)
     risk_flags = summary.get("risk_flags") or []
     approval = summary.get("approval_decision", "") or "approve"
+    top_opportunities = summary.get("top_opportunities_lines") or []
     parts = [
         f"RUN {run_id}",
+        "TOP_OPPORTUNITIES",
+        *(top_opportunities if top_opportunities else ["(no opportunity_ranking)"]),
         "PROPOSAL",
         *([str(x) for x in plan_lines] if plan_lines else ["(no plan)"]),
         "RISK FLAGS",

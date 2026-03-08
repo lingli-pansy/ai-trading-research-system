@@ -337,6 +337,68 @@ def _format_plan_summary(plan: RebalancePlan) -> list[str]:
     return [f"{x.symbol} {x.action_type} {x.delta:.2f}" for x in plan.items]
 
 
+def _action_to_allocator_decision(action_type: str, reason: str) -> str:
+    """Map plan action_type + reason to allocator_decision: probe | add | trim | close | skip."""
+    if (reason or "").strip().lower().startswith("probe"):
+        return "probe"
+    a = (action_type or "HOLD").upper()
+    if a in ("OPEN", "ADD"):
+        return "add"
+    if a == "TRIM":
+        return "trim"
+    if a == "CLOSE":
+        return "close"
+    return "skip"
+
+
+def _build_opportunity_ranking(
+    ranked: list[OpportunityScore],
+    research_snapshot: list[dict[str, Any]],
+    trigger: Any,
+    trigger_trace: Any,
+    filtered_plan: RebalancePlan,
+    signals_for_plan: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """构建 opportunity_ranking.json 内容：每 symbol 的 research/trigger/allocator/selected。"""
+    thesis_by_symbol = {s.get("symbol"): (s.get("thesis") or "")[:500] for s in research_snapshot if s.get("symbol")}
+    plan_by_symbol = {item.symbol: item for item in filtered_plan.items}
+    signal_by_symbol = {s.get("symbol"): s for s in signals_for_plan if s.get("symbol")}
+    trigger_fired = trigger is not None
+    trigger_reason = getattr(trigger, "trigger_reason", "") or ""
+    severity = getattr(trigger, "severity", "") or (trigger_trace.severity if hasattr(trigger_trace, "severity") else "")
+    if hasattr(trigger_trace, "to_dict"):
+        td = trigger_trace.to_dict()
+        trigger_reason = td.get("trigger_reason") or trigger_reason
+        severity = td.get("severity") or severity
+
+    symbols_list: list[dict[str, Any]] = []
+    for o in ranked:
+        sym = o.symbol
+        item = plan_by_symbol.get(sym)
+        signal = signal_by_symbol.get(sym)
+        reason = (item.reason if item else "") or (signal.get("rationale") if signal else "")
+        if item and item.target_position > 0:
+            target_weight = item.target_position
+            allocator_decision = _action_to_allocator_decision(item.action_type, reason)
+            selected = True
+        else:
+            target_weight = 0.0
+            allocator_decision = "skip"
+            selected = False
+        symbols_list.append({
+            "symbol": sym,
+            "research_score": round(o.score, 4),
+            "thesis_summary": thesis_by_symbol.get(sym, ""),
+            "trigger": trigger_fired,
+            "trigger_reason": trigger_reason if trigger_fired else "",
+            "severity": severity if trigger_fired else "",
+            "allocator_decision": allocator_decision,
+            "target_weight": target_weight,
+            "selected": selected,
+        })
+    return {"symbols": symbols_list}
+
+
 def _build_proposal(
     run_id: str,
     filtered_plan: RebalancePlan,
@@ -663,13 +725,28 @@ def run_autonomous_paper_cycle(
         paths["final_decision"] = store.path_for_artifact(run_id, "final_decision")
         paths["order_intents"] = store.path_for_artifact(run_id, "order_intents")
         paths["rebalance_plan"] = store.path_for_artifact(run_id, "rebalance_plan")
+        opportunity_ranking_data = _build_opportunity_ranking(
+            ranked, research_snapshot, trigger, trigger_trace, filtered_plan, signals_for_plan,
+        )
+        store.write_artifact(run_id, "opportunity_ranking", opportunity_ranking_data)
+        paths["opportunity_ranking"] = store.path_for_artifact(run_id, "opportunity_ranking")
         audit("final_decision", {"order_intents_count": len(filtered_order_intents), "risk_flags": check_result.risk_flags})
 
-        # 4.6) 生成 Proposal，写入 approval_request.json
+        # 4.6) 生成 Proposal，写入 approval_request.json（含 selection_reason 增强可解释性）
         proposal = _build_proposal(
             run_id, filtered_plan, check_result, _snapshot_to_dict(snap), store,
         )
-        store.write_proposal(run_id, proposal.to_dict())
+        proposal_dict = proposal.to_dict()
+        proposal_dict["selection_reason"] = [
+            {
+                "symbol": s["symbol"],
+                "research_score": s["research_score"],
+                "trigger": s.get("trigger_reason") or "-",
+                "allocator": s["allocator_decision"],
+            }
+            for s in opportunity_ranking_data["symbols"]
+        ]
+        store.write_proposal(run_id, proposal_dict)
         paths["approval_request"] = store.path_for_artifact(run_id, "approval_request")
         audit("proposal_created", {"proposal_summary": proposal.proposal_summary})
 
