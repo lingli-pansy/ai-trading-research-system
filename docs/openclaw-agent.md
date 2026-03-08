@@ -2,6 +2,11 @@
 
 **几分钟内：用配置驱动 paper 模式跑一次或持续 loop。**
 
+**推荐入口（OpenClaw 项目接入）**：见仓库根 **AGENTS.md** 与 **docs/openclaw-project-setup.md**。三类入口：  
+1）项目接入准备：AGENTS.md、skills/trading-approver/SKILL.md；  
+2）项目内 smoke：openclaw-approver-smoke；  
+3）运行主链路：openclaw-agent-once --config configs/openclaw_agent.paper.yaml。
+
 ---
 
 ## 1. 通过哪个 adapter 接入？
@@ -61,8 +66,8 @@ python -m ai_trading_research_system.presentation.cli openclaw-agent-loop --conf
 
 ## 7. 哪些旧入口不要继续依赖？
 
-- **不推荐**：直接调用 `run_autonomous_paper_cycle_report` 或零散传参、多入口并存的用法。
-- **推荐**：用 **配置文件 + openclaw-agent-once / openclaw-agent-loop**，或编程时使用 **OpenClawAgentConfig + openclaw.agent_adapter**。
+- **不推荐（compat）**：直接调用 `run_autonomous_paper_cycle_report`、`scripts/run_for_openclaw.py` 零散传参或多入口并存的用法；仅保留兼容，不作为官方入口。
+- **推荐**：用 **配置文件 + openclaw-agent-once / openclaw-agent-loop**，或编程时使用 **OpenClawAgentConfig + openclaw.agent_adapter**。项目接入与 smoke 见 **AGENTS.md** 与 **docs/openclaw-project-setup.md**。
 
 ---
 
@@ -123,6 +128,61 @@ python -m ai_trading_research_system.presentation.cli openclaw-agent-loop --conf
 export FEISHU_APP_ID="cli_xxx"
 export FEISHU_APP_SECRET="xxx"
 ```
+
+### 将飞书从 main 改为 trading（bindings）
+
+飞书默认会路由到 **main** agent。要让飞书使用本仓的 **trading** agent，需在 `~/.openclaw/openclaw.json` 里配置 **bindings**（与 `channels`、`agents` 同级）。
+
+1. **确认已有 trading agent**  
+   本仓脚本 `scripts/set_openclaw_workspace.py` 会在 `agents.list` 里加入 `id: "trading"`。若未跑过，先执行一次：  
+   `uv run python scripts/set_openclaw_workspace.py`
+
+2. **获取要绑定的 ID**  
+   - **私聊**：用户 Open ID 格式为 `ou_xxx`。可运行 `openclaw pairing list feishu` 查看待审批列表中的用户 ID；或 `openclaw logs --follow` 后在飞书发一条消息，从日志里看 `open_id`。  
+   - **群组**：群组 ID 格式为 `oc_xxx`。在群组里 @ 机器人发一条消息，从 `openclaw logs --follow` 的日志里看 `chat_id`。
+
+3. **在 openclaw.json 中添加 bindings**  
+   在文件顶层增加 `"bindings"` 数组（若已有则追加一条），例如：
+
+   **绑定某个飞书私聊到 trading：**
+   ```json
+   "bindings": [
+     {
+       "agentId": "trading",
+       "match": {
+         "channel": "feishu",
+         "peer": { "kind": "dm", "id": "ou_你的用户open_id" }
+       }
+     }
+   ]
+   ```
+
+   **绑定某个飞书群组到 trading：**
+   ```json
+   "bindings": [
+     {
+       "agentId": "trading",
+       "match": {
+         "channel": "feishu",
+         "peer": { "kind": "group", "id": "oc_群组id" }
+       }
+     }
+   ]
+   ```
+
+   可同时存在多条，分别绑定不同用户或群组到 `trading`。
+
+4. **重启网关并验证**  
+   ```bash
+   openclaw gateway restart
+   ```
+   验证绑定是否生效：  
+   ```bash
+   openclaw agents list --bindings
+   ```  
+   再在飞书里发消息，应由 **trading** agent 回复（会按本仓 AGENTS.md / skills 作答）。
+
+> 官方说明：[飞书 - 多 Agent 路由](https://docs.openclaw.ai/zh-CN/channels/feishu)。未匹配到任何 binding 时，飞书消息会继续走 **main** agent。
 
 ### 更多说明
 

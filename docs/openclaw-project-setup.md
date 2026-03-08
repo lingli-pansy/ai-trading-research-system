@@ -169,7 +169,7 @@ uv run python -m ai_trading_research_system.presentation.cli openclaw-approver-s
 
 **3. 在 OpenClaw 控制界面里确认 workspace**
 
-- **TUI**：运行 `openclaw tui` 后，按 **Ctrl+G** 打开 agent 选择器，选择 **trading**（本仓专用 agent），再问「这个项目是做什么的？我的 agent 角色是什么？」。若选的是默认的 main，会读到 OpenClaw 安装目录的文档，而不是本仓 `AGENTS.md`。
+- **TUI**：运行 `openclaw tui` 后，**看界面底部状态栏**：若显示 `agent main`，说明当前用的是 main，会读 OpenClaw 自带文档并可能去读不存在的 USER.md 等。请按 **Ctrl+G** 打开 agent 选择器，选择 **trading**，状态栏变为 `agent trading` 后再提问。
 - **Dashboard**：若用浏览器控制界面，同样需在会话里选择 agent 为 **trading**（若有选择器）。
 - 若 agent 能根据 `AGENTS.md` 回答「AI trading runtime」「proposal approver」等，说明已正确加载本仓 workspace。
 
@@ -186,7 +186,8 @@ uv run python -m ai_trading_research_system.presentation.cli openclaw-approver-s
 
 **应用新 agent（trading）而不是 main**  
 - 本仓脚本会在 `agents.list` 里加入 **trading** agent（workspace 指向本仓），并设 `default: true`，这样 Dashboard/TUI 会优先用 trading 而不是 main。  
-- 若 Dashboard 里仍只看到 main：请**重启 Gateway** 后刷新；或在 TUI 里按 **Ctrl+G** 选择 **trading**。  
+- 若 Dashboard 里仍只看到 main：请**重启 Gateway** 后刷新；或在 TUI 里按 **Ctrl+G** 选择 **trading**。
+- **TUI 底部状态栏**：`agent main` = 当前是 main（会读 USER.md 等、易报 MISSING）；`agent trading` = 当前是本仓 agent。务必切到 trading 再问本仓相关问题。
 - main 的 workspace 多为 `~/.openclaw/workspace`，会读 OpenClaw 自带文档；trading 的 workspace 才是本仓，会读 `AGENTS.md`。
 
 **Core Files 的「MISSING」与替换结果**  
