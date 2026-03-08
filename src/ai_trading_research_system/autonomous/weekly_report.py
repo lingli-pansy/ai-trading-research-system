@@ -25,8 +25,8 @@ class WeeklyReport:
     no_trade_days: int
     no_trade_reasons: list[str]
     next_week_suggestion: str  # 规则化建议
-    # 每日/每轮 Research 产出：分析结论、新闻摘要、盘面指标
-    daily_research: list[dict[str, Any]]  # [{day, symbol, thesis, suggested_action, confidence, key_drivers, news_snippets, price_summary, fundamentals_summary}, ...]
+    daily_research: list[dict[str, Any]]  # 每日/每轮 Research 产出
+    benchmark_source: str = "mock"  # "yfinance" | "mock"
 
 
 class WeeklyReportGenerator:
@@ -68,6 +68,7 @@ class WeeklyReportGenerator:
             no_trade_reasons=no_trade_reasons,
             next_week_suggestion=suggestion,
             daily_research=daily_research,
+            benchmark_source=getattr(benchmark_result, "benchmark_source", "mock"),
         )
 
     def to_dict(self, report: WeeklyReport) -> dict[str, Any]:

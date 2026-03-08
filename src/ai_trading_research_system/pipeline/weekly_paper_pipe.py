@@ -20,6 +20,7 @@ from ai_trading_research_system.autonomous import (
     BenchmarkResult,
     WeeklyReport,
 )
+from ai_trading_research_system.autonomous.benchmark import get_benchmark_return_for_period
 from ai_trading_research_system.autonomous.schemas import WeeklyTradingMandate, AccountSnapshot
 from ai_trading_research_system.research.orchestrator import ResearchOrchestrator
 from ai_trading_research_system.strategy.translator import ContractTranslator
@@ -48,13 +49,13 @@ def run_weekly_autonomous_paper(
     benchmark: str = "SPY",
     duration_days: int = 5,
     auto_confirm: bool = True,
-    use_mock: bool = True,
+    use_mock: bool = False,
     use_llm: bool = False,
     report_dir: Path | None = None,
 ) -> WeeklyPaperResult:
     """
     执行一周自治 paper：mandate -> snapshot -> 多轮 research/allocator/paper -> benchmark -> report -> store。
-    默认 5 个 trading day 用 5 次迭代模拟（同一天内跑完），走 Nautilus 主线。
+    默认走真实路径（IBKR snapshot、yfinance 数据、真实 benchmark）；仅显式 use_mock=True 时走 mock。
     """
     mandate = mandate_from_cli(
         capital=capital,
@@ -64,7 +65,7 @@ def run_weekly_autonomous_paper(
     )
     sm = AutonomousExecutionStateMachine()
     sm.start()
-    snapshot = get_account_snapshot(paper=True, mock=True, initial_cash=capital)
+    snapshot = get_account_snapshot(paper=True, mock=use_mock, initial_cash=capital, allow_fallback=True)
     allocator = PortfolioAllocator(max_position_pct=0.25)
     orchestrator = ResearchOrchestrator(use_mock=use_mock, use_llm=use_llm)
     translator = ContractTranslator()
@@ -140,7 +141,13 @@ def run_weekly_autonomous_paper(
 
     sm.complete_week()
     portfolio_return = total_pnl / capital if capital else 0.0
-    benchmark_return = 0.0  # mock: SPY 周收益暂用 0；后续可接 yfinance
+    # 主路径：真实 benchmark 收益；use_mock 时仍可拉 SPY 或返回 0 并标记 source=mock
+    benchmark_return, benchmark_source = get_benchmark_return_for_period(
+        symbol=benchmark,
+        lookback_days=duration_days,
+    )
+    if use_mock:
+        benchmark_source = "mock"
     comp = BenchmarkComparator()
     bench_result = comp.compare(
         portfolio_return=portfolio_return,
@@ -148,6 +155,7 @@ def run_weekly_autonomous_paper(
         max_drawdown=0.0,
         trade_count=total_trades,
         period=f"day_0_to_{duration_days}",
+        benchmark_source=benchmark_source,
     )
     gen = WeeklyReportGenerator()
     report = gen.generate(
@@ -166,6 +174,7 @@ def run_weekly_autonomous_paper(
         import json
         json.dump(gen.to_dict(report), f, ensure_ascii=False, indent=2)
 
+    market_data_source = "mock" if use_mock else "yfinance"
     summary = {
         "portfolio_return": portfolio_return,
         "benchmark_return": benchmark_return,
@@ -174,7 +183,10 @@ def run_weekly_autonomous_paper(
         "pnl": total_pnl,
         "report_path": report_path,
         "daily_research_count": len(daily_research),
-        "analysis_in_report": True,  # 分析结论、新闻摘要、盘面指标见 report_path 内 daily_research
+        "analysis_in_report": True,
+        "snapshot_source": snapshot.source,
+        "market_data_source": market_data_source,
+        "benchmark_source": benchmark_source,
     }
     return WeeklyPaperResult(
         ok=True,

@@ -181,7 +181,7 @@ def run_weekly_paper_report(
     benchmark: str = "SPY",
     duration_days: int = 5,
     auto_confirm: bool = True,
-    use_mock: bool = True,
+    use_mock: bool = False,
     use_llm: bool = False,
 ) -> dict[str, Any]:
     """UC-09: Weekly autonomous paper. Returns JSON for OpenClaw (ok, mandate_id, status, report_path, summary)."""

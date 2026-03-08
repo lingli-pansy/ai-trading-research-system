@@ -16,6 +16,8 @@ class AccountSnapshot:
     open_orders: list[dict[str, Any]]  # [{"symbol", "side", "quantity", "status"}, ...]
     risk_budget: float  # 剩余风险预算（如每日止损剩余）
     timestamp: str  # ISO format
+    buying_power: float = 0.0  # 可用购买力（IBKR 等返回）
+    source: str = "mock"  # "ibkr" | "mock"，用于显式记录数据来源
 
     def total_equity(self) -> float:
         return self.equity if self.equity > 0 else self.cash

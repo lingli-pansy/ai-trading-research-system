@@ -37,7 +37,7 @@ CLI、OpenClaw、E2E 消费的执行结果字段对齐。backtest / paper / demo
 | report_path | 周报 JSON 文件路径；**分析结果、新闻、盘面指标**均在此文件内 |
 | summary | portfolio_return, benchmark_return, excess_return, trade_count, pnl, daily_research_count, analysis_in_report |
 
-**周报文件（report_path）内容**：除收益与交易汇总外，含 **daily_research** 数组，每轮 Research 一条，字段包括：day, symbol, thesis（分析结论）, suggested_action, confidence, key_drivers, news_snippets（新闻摘要）, price_summary（盘面）, fundamentals_summary（基本面）.
+**周报文件（report_path）内容**：除收益与交易汇总外，含 **daily_research** 数组；以及 **benchmark_source**（"yfinance" | "mock"）。主路径默认真实数据，输出 JSON 含 **snapshot_source**、**market_data_source**、**benchmark_source**，fallback 到 mock 时显式标记。
 
 ---
 

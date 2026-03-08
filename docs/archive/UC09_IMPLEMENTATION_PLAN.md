@@ -54,7 +54,11 @@
 ```
 
 ### 5. 仍为 stub / mock 的能力
-- **AccountSnapshot**：无真实 broker 时为 mock（固定 cash/equity/positions）。
-- **Benchmark**：benchmark_return 当前为 0（SPY 未接真实行情）。
 - **mandate_from_nl**：自然语言转 mandate 为规则占位，未接 LLM。
 - **一周执行**：用 duration_days 次迭代在单进程内跑完，非真实日历一周调度。
+
+### 6. Real 路径切换（主路径默认真实）
+
+- **默认**：CLI / OpenClaw / run_weekly_autonomous_paper 默认 **use_mock=False**（真实数据、真实 benchmark）；AccountSnapshot 优先 IBKR paper（需 IBKR_HOST/IBKR_PORT），失败则 fallback mock 并标记 snapshot_source=mock。
+- **输出**：JSON 增加 snapshot_source、market_data_source、benchmark_source。
+- **验证**：`verify_uc09_mock.py`（CI/回归）、`verify_uc09_real.py`（真实联调）。盘点见 [UC09_REAL_PATH_MOCK_INVENTORY.md](UC09_REAL_PATH_MOCK_INVENTORY.md)。
