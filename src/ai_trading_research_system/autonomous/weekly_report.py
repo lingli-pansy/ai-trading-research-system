@@ -3,7 +3,7 @@ WeeklyReportGenerator：生成用户可读的周报。
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import Any
 
 from ai_trading_research_system.autonomous.benchmark import BenchmarkResult
@@ -12,22 +12,24 @@ from ai_trading_research_system.autonomous.schemas import WeeklyTradingMandate
 
 @dataclass
 class WeeklyReport:
-    """周报结构；组合层指标：portfolio_return, benchmark_return, excess_return, max_drawdown, turnover, trade_count。"""
+    """周报结构；组合层指标 + opportunity_ranking + replacement_decisions（解释为何替换仓位）。"""
     mandate_id: str
     period: str
     portfolio_return_pct: float
     benchmark_return_pct: float
     excess_return_pct: float
     max_drawdown_pct: float
-    turnover_pct: float  # 组合换手率
+    turnover_pct: float
     trade_count: int
-    key_trades: list[str]  # 简要描述
+    key_trades: list[str]
     risk_events: list[str]
     no_trade_days: int
     no_trade_reasons: list[str]
-    next_week_suggestion: str  # 规则化建议
-    daily_research: list[dict[str, Any]]  # 每日/每轮 Research 产出
-    benchmark_source: str = "mock"  # "yfinance" | "mock"
+    next_week_suggestion: str
+    daily_research: list[dict[str, Any]]
+    benchmark_source: str = "mock"
+    opportunity_ranking: list[dict[str, Any]] = field(default_factory=list)
+    replacement_decisions: list[dict[str, Any]] = field(default_factory=list)
 
 
 class WeeklyReportGenerator:
@@ -44,12 +46,15 @@ class WeeklyReportGenerator:
         no_trade_reasons: list[str] | None = None,
         daily_research: list[dict[str, Any]] | None = None,
         turnover_pct: float = 0.0,
+        opportunity_ranking: list[dict[str, Any]] | None = None,
+        replacement_decisions: list[dict[str, Any]] | None = None,
     ) -> WeeklyReport:
         key_trades = key_trades or []
         risk_events = risk_events or []
         no_trade_reasons = no_trade_reasons or []
         daily_research = daily_research or []
-        # 规则化下周建议
+        opportunity_ranking = opportunity_ranking or []
+        replacement_decisions = replacement_decisions or []
         if benchmark_result.excess_return > 0.02:
             suggestion = "组合跑赢基准，可维持当前风险偏好。"
         elif benchmark_result.trade_count == 0:
@@ -72,6 +77,8 @@ class WeeklyReportGenerator:
             next_week_suggestion=suggestion,
             daily_research=daily_research,
             benchmark_source=getattr(benchmark_result, "benchmark_source", "mock"),
+            opportunity_ranking=opportunity_ranking,
+            replacement_decisions=replacement_decisions,
         )
 
     def to_dict(self, report: WeeklyReport) -> dict[str, Any]:

@@ -1,4 +1,4 @@
-"""PortfolioAllocator: snapshot + mandate + signals -> target_positions, replacement_decisions. No direct order."""
+"""PortfolioAllocator: snapshot + mandate + ranked opportunities/signals -> PortfolioTarget (target_positions, replacements, rationale)."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -19,8 +19,9 @@ class AllocationResult:
 
 class PortfolioAllocator:
     """
-    比较 current positions 与 new opportunities；若新机会更优可替换旧仓位。
-    输出 target_positions、replacement_decisions、allocation_rationale。
+    Compare current positions vs ranked opportunities; replace only when new opportunity score > weakest current holding.
+    Input: signals may include "score" (from OpportunityRanking); sorted by score desc when present.
+    Output: target_positions, replacement_decisions (why replaced), allocation_rationale.
     """
 
     def __init__(self, max_position_pct: float = 0.25):
@@ -53,12 +54,16 @@ class PortfolioAllocator:
 
         cash_reserve = account_snapshot.total_equity() * mandate.cash_reserve_pct
         current_positions = {p.get("symbol"): p for p in (account_snapshot.positions or []) if p.get("symbol")}
-        # 新信号按 size_fraction 降序（更优机会优先）
-        sorted_signals = sorted(
-            signals,
-            key=lambda s: float(s.get("size_fraction", s.get("allowed_position_size", 0))),
-            reverse=True,
-        )
+        # Sort by score desc when present (opportunity ranking), else by size_fraction
+        has_scores = any(s.get("score") is not None for s in signals)
+        def sort_key(s: dict) -> tuple[float, float]:
+            score = float(s.get("score", 0) or 0)
+            size = float(s.get("size_fraction", s.get("allowed_position_size", 0)) or 0)
+            if has_scores:
+                return (-score, -size)
+            return (-size, 0.0)
+        sorted_signals = sorted(signals, key=sort_key)
+
         targets: list[dict[str, Any]] = []
         replacement_decisions: list[dict[str, Any]] = []
         taken = 0.0
@@ -74,45 +79,59 @@ class PortfolioAllocator:
             if weight <= 0 or not symbol:
                 continue
             rationale = s.get("rationale", "signal")
+            score = float(s.get("score", 0) or 0)
+            target_entry = {"symbol": symbol, "weight_pct": weight, "rationale": rationale}
+            if has_scores:
+                target_entry["score"] = score
+
             if symbol in current_positions:
-                targets.append({"symbol": symbol, "weight_pct": weight, "rationale": rationale})
+                targets.append(target_entry)
                 used_symbols.add(symbol)
                 taken += weight
                 continue
             if len(targets) >= slots:
-                # 替换：从 current 中选一个不在 targets 的仓位换出，或从 targets 中换出最弱
-                replaced = False
-                for pos_sym in list(current_positions.keys()):
-                    if pos_sym in used_symbols:
-                        continue
-                    replacement_decisions.append({
-                        "symbol_out": pos_sym,
-                        "symbol_in": symbol,
-                        "reason": f"replace_with_{rationale[:30]}",
-                    })
-                    targets.append({"symbol": symbol, "weight_pct": weight, "rationale": rationale})
-                    used_symbols.add(symbol)
-                    taken += weight
-                    replaced = True
-                    break
-                if not replaced:
-                    worst = min(targets, key=lambda t: t["weight_pct"])
-                    replacement_decisions.append({
-                        "symbol_out": worst["symbol"],
-                        "symbol_in": symbol,
-                        "reason": f"replace_weaker_with_{rationale[:30]}",
-                    })
-                    targets.remove(worst)
-                    targets.append({"symbol": symbol, "weight_pct": weight, "rationale": rationale})
-                    used_symbols.discard(worst["symbol"])
-                    used_symbols.add(symbol)
-                    taken = sum(t["weight_pct"] for t in targets)
-                break
-            targets.append({"symbol": symbol, "weight_pct": weight, "rationale": rationale})
+                # Replacement: only when new opportunity score > weakest current holding score
+                weakest = min(
+                    targets,
+                    key=lambda t: (float(t.get("score", 0) or 0), t.get("weight_pct", 1.0)),
+                )
+                weakest_score = float(weakest.get("score", 0) or 0)
+                if has_scores and score <= weakest_score:
+                    continue
+                replacement_decisions.append({
+                    "symbol_out": weakest["symbol"],
+                    "symbol_in": symbol,
+                    "reason": f"new_score_{score:.2f}_gt_weakest_{weakest_score:.2f}_{rationale[:25]}",
+                })
+                targets.remove(weakest)
+                used_symbols.discard(weakest["symbol"])
+                targets.append(target_entry)
+                used_symbols.add(symbol)
+                taken = sum(t["weight_pct"] for t in targets)
+                continue
+            targets.append(target_entry)
             used_symbols.add(symbol)
             taken += weight
             if taken >= 1.0:
                 break
+
+        # Post-pass: record replacements when current positions were dropped for new opportunities
+        target_symbols = {t["symbol"] for t in targets}
+        out_set = set(current_positions) - target_symbols
+        in_list = [t for t in targets if t["symbol"] not in current_positions]
+        if not replacement_decisions and out_set and in_list and has_scores:
+            # Pair each new position with a dropped current (by score order)
+            out_list = sorted(out_set)
+            for i, t in enumerate(in_list):
+                if i < len(out_list):
+                    symbol_in = t["symbol"]
+                    symbol_out = out_list[i]
+                    new_score = float(t.get("score", 0) or 0)
+                    replacement_decisions.append({
+                        "symbol_out": symbol_out,
+                        "symbol_in": symbol_in,
+                        "reason": f"new_score_{new_score:.2f}_replaced_{symbol_out}_{t.get('rationale', '')[:25]}",
+                    })
 
         rationale_parts = [f"positions={len(targets)}", f"cash_reserve_pct={mandate.cash_reserve_pct}"]
         if replacement_decisions:

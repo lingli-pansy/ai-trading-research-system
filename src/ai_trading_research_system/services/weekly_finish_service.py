@@ -13,6 +13,7 @@ from ai_trading_research_system.services.report_service import (
     generate_and_write as report_generate_and_write,
     build_weekly_result_summary,
 )
+from ai_trading_research_system.experience.store import write_weekly_portfolio_experience
 
 # Avoid circular import: pipe defines WeeklyPaperResult
 def _result_type():
@@ -38,6 +39,9 @@ def finish_week(
     report_dir: Path,
     turnover_pct: float = 0.0,
     max_drawdown: float = 0.0,
+    opportunity_ranking: list[dict[str, Any]] | None = None,
+    replacement_decisions: list[dict[str, Any]] | None = None,
+    retained_positions: list[dict[str, Any]] | None = None,
 ) -> Any:
     """
     After execution loop: compute benchmark, write report, build summary, return WeeklyPaperResult.
@@ -70,6 +74,16 @@ def finish_week(
         daily_research=daily_research,
         report_dir=report_dir,
         turnover_pct=turnover_pct,
+        opportunity_ranking=opportunity_ranking or [],
+        replacement_decisions=replacement_decisions or [],
+    )
+    period = f"day_0_to_{duration_days}"
+    write_weekly_portfolio_experience(
+        mandate_id=mandate.mandate_id,
+        period=period,
+        top_opportunity_scores=opportunity_ranking or [],
+        replaced_positions=replacement_decisions or [],
+        retained_positions=retained_positions or [],
     )
     market_data_source = "mock" if use_mock else "yfinance"
     summary = build_weekly_result_summary(

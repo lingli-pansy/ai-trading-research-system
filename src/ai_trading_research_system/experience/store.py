@@ -64,6 +64,15 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             dominant_failure_patterns TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
+        CREATE TABLE IF NOT EXISTS weekly_portfolio_experience (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mandate_id TEXT NOT NULL,
+            period TEXT NOT NULL,
+            top_opportunity_scores TEXT,
+            replaced_positions TEXT,
+            retained_positions TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
     """)
 
 
@@ -171,6 +180,38 @@ def write_experience_summary(
             VALUES (?, ?, ?)
             """,
             (regime_tag, aggregated_performance, dominant_failure_patterns),
+        )
+        conn.commit()
+        return cur.lastrowid or 0
+    finally:
+        conn.close()
+
+
+def write_weekly_portfolio_experience(
+    mandate_id: str,
+    period: str,
+    *,
+    top_opportunity_scores: list[dict[str, Any]] | None = None,
+    replaced_positions: list[dict[str, Any]] | None = None,
+    retained_positions: list[dict[str, Any]] | None = None,
+    db_path: Path | None = None,
+) -> int:
+    """Write one weekly_portfolio_experience row. Returns row id."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO weekly_portfolio_experience (mandate_id, period, top_opportunity_scores, replaced_positions, retained_positions)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                mandate_id,
+                period,
+                json.dumps(top_opportunity_scores or [], ensure_ascii=False),
+                json.dumps(replaced_positions or [], ensure_ascii=False),
+                json.dumps(retained_positions or [], ensure_ascii=False),
+            ),
         )
         conn.commit()
         return cur.lastrowid or 0

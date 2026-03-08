@@ -24,6 +24,8 @@ def generate_and_write(
     daily_research: list[dict[str, Any]] | None = None,
     report_dir: Path | None = None,
     turnover_pct: float = 0.0,
+    opportunity_ranking: list[dict[str, Any]] | None = None,
+    replacement_decisions: list[dict[str, Any]] | None = None,
 ) -> str:
     """Generate weekly report and write to report_dir/weekly_report_{mandate_id}.json. Returns path."""
     gen = WeeklyReportGenerator()
@@ -36,6 +38,8 @@ def generate_and_write(
         no_trade_reasons=no_trade_reasons or [],
         daily_research=daily_research or [],
         turnover_pct=turnover_pct,
+        opportunity_ranking=opportunity_ranking or [],
+        replacement_decisions=replacement_decisions or [],
     )
     report_dir = report_dir or Path(".")
     report_dir.mkdir(parents=True, exist_ok=True)
