@@ -9,7 +9,7 @@
 ## 当前目标与主路径
 
 - **Canonical path**：`autonomous_paper_cycle`（单周期：读组合 → 研究 → 规则/风控 → RebalancePlan → 订单意图/执行 → 落盘）。
-- **OpenClaw 接入**：调用 `autonomous_paper_cycle`（脚本：`scripts/run_for_openclaw.py autonomous_paper_cycle ...`；编程：`openclaw.adapter.run_autonomous_paper_cycle_report`）。
+- **OpenClaw 用户入口**：用户 4 个动作（开始建仓/查看组合/调仓建议/确认执行）走 **handle_trading_intent_sync**；说明见 **AGENTS.md**、**docs/mvp-boundary.md**、**docs/openclaw-project-setup.md**。开发/调试：`openclaw-agent-once`、`openclaw-approver-smoke`。
 - **Paper trading 推荐命令**：`python -m ai_trading_research_system.presentation.cli paper-cycle --symbols NVDA [--mock]`。
 - **状态与 artifact 存放**：**runs/** 下 `runs/<run_id>/`（snapshots、artifacts、execution、audit）；统一经 **state.RunStore** 读写。
 
@@ -49,7 +49,7 @@ Execution Engine
 2. **前置检查**：`python scripts/check_dev_prerequisites.py`。
 3. **Demo**：`python cli.py demo NVDA --mock`，可见四块：研究结论、策略生成、回测结果、交易总结；输出中会标明「执行引擎: NautilusTrader」。
 4. **E2E 校验**：`python scripts/run_e2e_check.py NVDA --mock`，校验 Pipeline 跑通且 Experience Store 有写入。
-5. **OpenClaw 调用示例**：`python cli.py research NVDA --mock` 或 `python scripts/run_for_openclaw.py autonomous_paper_cycle NVDA --mock`，stdout 为单条 JSON；详见 [docs/current-path.md](docs/current-path.md)、[docs/operations.md](docs/operations.md)。
+5. **OpenClaw 用户入口 smoke**：`openclaw-trading-intent-sync --message-json '{"message":"开始建仓"}'`；开发联调：`openclaw-agent-once`、`openclaw-approver-smoke`。详见 [AGENTS.md](AGENTS.md)、[docs/openclaw-project-setup.md](docs/openclaw-project-setup.md)、[docs/mvp-boundary.md](docs/mvp-boundary.md)。
 
 **可选**：`python cli.py research NVDA --mock` 查看 Contract JSON；使用真实数据或 LLM 见下方命令示例。
 

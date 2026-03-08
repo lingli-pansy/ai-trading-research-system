@@ -371,6 +371,15 @@ def route_user_intent(message: str) -> IntentType:
     return "unknown"
 
 
+def _format_user_summary_start_build_position(details: dict[str, Any]) -> str:
+    """面向用户的单行摘要：建仓方案 + 建议。"""
+    lines = details.get("proposal_summary") or []
+    rec = (details.get("recommendation") or "defer").lower()
+    if lines:
+        return f"已生成建仓方案：{'，'.join(str(x) for x in lines[:5])}{'…' if len(lines) > 5 else ''}。建议：{rec}。是否确认执行？"
+    return "已生成建仓方案。建议：%s。是否确认执行？" % rec
+
+
 def _handler_start_build_position(
     *,
     config: OpenClawAgentConfig | None = None,
@@ -396,19 +405,42 @@ def _handler_start_build_position(
     store = get_run_store(root=root)
     agent_context = load_agent_context(run_id, runs_root=root)
     proposal = store.read_proposal(run_id) or {}
-    return {
-        "status": "pending_confirmation",
-        "summary": "已生成投资组合方案",
-        "details": {
-            "run_id": run_id,
-            "ok": out.ok,
-            "proposal_summary": proposal.get("proposal_summary") or [],
-            "rebalance_plan": proposal.get("rebalance_plan") or {},
-            "recommendation": (agent_context or {}).get("recommendation") or "defer",
-            "recommendation_reasons": (agent_context or {}).get("recommendation_reasons") or [],
-            "approval_focus": (agent_context or {}).get("approval_focus") or [],
-        },
+    details = {
+        "run_id": run_id,
+        "ok": out.ok,
+        "proposal_summary": proposal.get("proposal_summary") or [],
+        "rebalance_plan": proposal.get("rebalance_plan") or {},
+        "recommendation": (agent_context or {}).get("recommendation") or "defer",
+        "recommendation_reasons": (agent_context or {}).get("recommendation_reasons") or [],
+        "approval_focus": (agent_context or {}).get("approval_focus") or [],
     }
+    summary = _format_user_summary_start_build_position(details)
+    return {"status": "pending_confirmation", "summary": summary, "details": details}
+
+
+def _format_user_summary_show_portfolio(details: dict[str, Any]) -> str:
+    """面向用户的单行摘要：当前组合 + 现金。"""
+    port = details.get("portfolio") or {}
+    positions = port.get("positions") or []
+    cash = port.get("cash")
+    parts = []
+    for p in positions[:10]:
+        sym = p.get("symbol", "")
+        w = p.get("weight_pct")
+        if w is not None:
+            parts.append(f"{sym} {w}%")
+        else:
+            parts.append(sym)
+    if parts:
+        s = "当前组合：" + "，".join(parts)
+    else:
+        s = "当前组合：无持仓"
+    if cash is not None:
+        if cash >= 10000:
+            s += f"，现金 {cash / 10000:.1f} 万"
+        else:
+            s += f"，现金 {cash:.0f}"
+    return s
 
 
 def _handler_show_portfolio(*, runs_root: Path | None = None) -> dict[str, Any]:
@@ -418,21 +450,28 @@ def _handler_show_portfolio(*, runs_root: Path | None = None) -> dict[str, Any]:
     if not state:
         return {
             "status": "error",
-            "summary": "无组合数据",
+            "summary": "暂无组合数据",
             "details": {"portfolio": {}},
         }
-    return {
-        "status": "ok",
-        "summary": "当前组合",
-        "details": {
-            "portfolio": {
-                "equity": state.get("equity"),
-                "cash": state.get("cash"),
-                "positions": state.get("positions") or [],
-                "source": state.get("source", ""),
-            },
+    details = {
+        "portfolio": {
+            "equity": state.get("equity"),
+            "cash": state.get("cash"),
+            "positions": state.get("positions") or [],
+            "source": state.get("source", ""),
         },
     }
+    summary = _format_user_summary_show_portfolio(details)
+    return {"status": "ok", "summary": summary, "details": details}
+
+
+def _format_user_summary_review_proposal(details: dict[str, Any]) -> str:
+    """面向用户的单行摘要：调仓建议 + 建议。"""
+    lines = details.get("proposal_summary") or []
+    rec = (details.get("recommendation") or "defer").lower()
+    if lines:
+        return f"发现最新调仓建议：{'，'.join(str(x) for x in lines[:5])}{'…' if len(lines) > 5 else ''}。建议：{rec}。是否查看详情？"
+    return f"发现最新调仓建议。建议：{rec}。是否查看详情？"
 
 
 def _handler_review_latest_proposal(*, runs_root: Path | None = None) -> dict[str, Any]:
@@ -448,18 +487,16 @@ def _handler_review_latest_proposal(*, runs_root: Path | None = None) -> dict[st
     run_id = pending.get("run_id", "")
     proposal = pending.get("proposal") or {}
     agent_context = load_agent_context(run_id, runs_root=runs_root)
-    return {
-        "status": "pending_confirmation",
-        "summary": "有待审批的调仓建议",
-        "details": {
-            "run_id": run_id,
-            "proposal": proposal,
-            "proposal_summary": proposal.get("proposal_summary") or [],
-            "approval_focus": (agent_context or {}).get("approval_focus") or [],
-            "recommendation": (agent_context or {}).get("recommendation") or "defer",
-            "recommendation_reasons": (agent_context or {}).get("recommendation_reasons") or [],
-        },
+    details = {
+        "run_id": run_id,
+        "proposal": proposal,
+        "proposal_summary": proposal.get("proposal_summary") or [],
+        "approval_focus": (agent_context or {}).get("approval_focus") or [],
+        "recommendation": (agent_context or {}).get("recommendation") or "defer",
+        "recommendation_reasons": (agent_context or {}).get("recommendation_reasons") or [],
     }
+    summary = _format_user_summary_review_proposal(details)
+    return {"status": "pending_confirmation", "summary": summary, "details": details}
 
 
 def _handler_approve_execution(
@@ -495,9 +532,10 @@ def _handler_approve_execution(
     results = run_execution_after_approval(run_id, store, use_mock=use_mock)
     executed = len([r for r in results if r.get("order_done")])
     trade_count = sum(int(r.get("trade_count", 0)) for r in results)
+    summary = f"已完成审批并执行。成交 {executed} 笔，共 {trade_count} 笔交易。"
     return {
         "status": "ok",
-        "summary": f"已执行，成交 {executed} 笔，共 {trade_count} 笔交易",
+        "summary": summary,
         "details": {"run_id": run_id, "executed_orders": executed, "trade_count": trade_count, "paper_results": results},
     }
 
@@ -568,8 +606,8 @@ def handle_trading_intent(
     timeout_seconds: float = DEFAULT_INTENT_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
     """
-    单一 Python 入口：在 agent adapter 内直接调用 trading runtime，不构造 shell / exec / poll。
-    返回统一格式 { status, summary, details }，供 agent 在一个响应内完成回复。
+    兼容入口：与 bridge.handle_trading_intent_sync 同效，推荐统一使用 handle_trading_intent_sync。
+    返回 { status, summary, details }。
     """
     return dispatch_trading_intent(
         message,

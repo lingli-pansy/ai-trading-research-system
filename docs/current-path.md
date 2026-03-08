@@ -17,11 +17,9 @@
 
 ## 2. OpenClaw 调哪个接口？
 
-- **推荐（配置驱动）**：`openclaw.agent_adapter` + `OpenClawAgentConfig`  
-  - CLI：`openclaw-agent-once --config configs/openclaw_agent.paper.yaml` / `openclaw-agent-loop --config ...`  
-  - 编程：`run_openclaw_agent_once(config)` 或 `create_openclaw_agent(config)` 后 `run_loop(...)`  
-  - 详见 [openclaw-agent.md](openclaw-agent.md)。  
-- **兼容（技能式单次）**：`scripts/run_for_openclaw.py autonomous_paper_cycle [SYMBOL] ...`、`openclaw.adapter.run_autonomous_paper_cycle_report(...)`。  
+- **用户/对话唯一入口**：`openclaw.bridge.handle_trading_intent_sync(message)`，四类动作一次返回 status/summary/details。CLI smoke：`openclaw-trading-intent-sync --message-json '{"message":"开始建仓"}'`。  
+- **开发/调试**：`openclaw-agent-once`、`openclaw-agent-loop`、`openclaw-approver-smoke`（见 AGENTS.md、openclaw-project-setup.md）。  
+- **兼容（compat）**：`scripts/run_for_openclaw.py`、`openclaw.adapter.run_autonomous_paper_cycle_report(...)`；不作为官方入口。  
 - 契约：`openclaw/contract.py` 中 `AutonomousPaperCycleInput` / `AutonomousPaperCycleOutput`。  
 
 ---

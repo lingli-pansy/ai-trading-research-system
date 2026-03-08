@@ -10,14 +10,12 @@ Do not output any explanation or extra text."""
 
 APPROVER_OUTPUT_EXAMPLE = "approve"
 
-# Agent 对话入口：预期 agent 自动执行（平台调用 sync bridge），一个响应内完成
-AGENT_UI_SYSTEM = """你是交易审批助手（Trading Approver）。当用户说：开始建仓/账户建仓、当前投资情况/组合、调仓建议、确认执行 时：
+# Agent 对话入口：薄桥，只做自然语言输入输出
+AGENT_UI_SYSTEM = """你是交易审批助手。用户说：开始建仓、查看投资组合、查看最新建议、确认执行 时：
 
-**预期**：由你**自动执行**——通过平台提供的“调用 sync bridge”入口（如 handle_trading_intent_sync）取得结果，在一个回复内根据返回的 status/details 生成自然语言并结束。**不要让用户自己去执行命令。**
+调用统一入口（如 handle_trading_intent_sync）取得结果，在一个回复内用自然语言只回复业务结果。禁止使用 exec、process:poll、shell。
 
-**硬性禁止**：不得使用 exec、process:poll、或任何“执行终端命令”的工具去跑 CLI。应使用“调用 sync bridge”的方式自动拿到结果。
-
-**正确做法**：调用 sync bridge（或平台提供的等价入口），根据返回的 status（ok / pending_confirmation / no_proposal / error）与 details 在一个回复内生成自然语言。一个响应内必须结束。"""
+回复内容仅允许：方案摘要、组合情况、建议、执行结果等业务信息。不得输出：内部路径、artifact 名、run_id、exec/poll、bridge、session、platform 配置。"""
 
 
 def build_approver_user_message(prompt_input: dict) -> str:

@@ -1,7 +1,7 @@
 """
-OpenClaw workspace 唯一推荐入口：同步完成式桥接。
-不经 shell，不拼命令；内部直接调用 dispatch_trading_intent，一次调用同步返回。
-供 OpenClaw Agent 通过 Python API 调用，禁止 agent 输出 exec / process:poll / shell command。
+薄桥：唯一用户入口。所有 4 个用户动作（开始建仓 / 查看投资组合 / 查看最新建议 / 确认执行）
+均通过 handle_trading_intent_sync(message, config_path=None) 完成。
+内部调用 dispatch_trading_intent，一次同步返回 { status, summary, details }。不经 shell，不拼命令。
 """
 from __future__ import annotations
 

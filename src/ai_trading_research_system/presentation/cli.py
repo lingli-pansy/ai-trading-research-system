@@ -108,24 +108,24 @@ def main() -> int:
     p_agent_loop.add_argument("--benchmark", default="SPY", help="Benchmark (default SPY)")
     _add_common(p_agent_loop)
 
-    p_openclaw_once = subparsers.add_parser("openclaw-agent-once", help="OpenClaw: one run via config (config -> adapter -> agent)")
+    p_openclaw_once = subparsers.add_parser("openclaw-agent-once", help="[开发] 单次 agent run，config -> adapter -> agent")
     p_openclaw_once.add_argument("--config", required=True, help="Path to OpenClaw agent config (yaml/json)")
     p_openclaw_once.add_argument("--context", action="store_true", help="Include health/experience summary in output")
 
-    p_openclaw_loop = subparsers.add_parser("openclaw-agent-loop", help="OpenClaw: loop via config (config -> adapter -> agent)")
+    p_openclaw_loop = subparsers.add_parser("openclaw-agent-loop", help="[开发] agent 循环运行")
     p_openclaw_loop.add_argument("--config", required=True, help="Path to OpenClaw agent config (yaml/json)")
     p_openclaw_loop.add_argument("--context", action="store_true", help="Include health/experience summary each run")
 
-    p_openclaw_smoke = subparsers.add_parser("openclaw-approver-smoke", help="OpenClaw: single-round approver integration (proposal -> prompt -> mock output -> parsed decision)")
+    p_openclaw_smoke = subparsers.add_parser("openclaw-approver-smoke", help="[开发] approver 联调 smoke：proposal -> prompt -> mock -> parsed decision")
     p_openclaw_smoke.add_argument("--config", required=True, help="Path to OpenClaw agent config (yaml/json)")
     p_openclaw_smoke.add_argument("--raw", default=None, help="Mock raw agent output (default: approve)")
 
-    p_trading_intent = subparsers.add_parser("openclaw-trading-intent", help="OpenClaw: sync intent dispatcher, no exec/poll. Message via --message-json or stdin.")
-    p_trading_intent.add_argument("--message-json", default=None, help='JSON with "message" key, e.g. \'{"message": "账户建仓"}\'')
+    p_trading_intent = subparsers.add_parser("openclaw-trading-intent", help="(deprecated) 请用 openclaw-trading-intent-sync。原 sync intent 入口，--message-json 或 stdin。")
+    p_trading_intent.add_argument("--message-json", default=None, help='JSON with "message" key')
     p_trading_intent.add_argument("--config", default=None, help="Path to OpenClaw agent config (optional)")
     p_trading_intent.add_argument("--timeout", type=float, default=30, help="Handler timeout seconds (default 30)")
 
-    p_trading_intent_sync = subparsers.add_parser("openclaw-trading-intent-sync", help="Bridge smoke: single sync entry, no subprocess. Uses handle_trading_intent_sync.")
+    p_trading_intent_sync = subparsers.add_parser("openclaw-trading-intent-sync", help="[用户/agent 主入口] 唯一推荐：调用 handle_trading_intent_sync，四类指令一次返回 status/summary/details。")
     p_trading_intent_sync.add_argument("--message-json", required=True, help='JSON with "message" key, e.g. \'{"message": "开始建仓"}\'')
     p_trading_intent_sync.add_argument("--config", default=None, help="Path to OpenClaw agent config (optional)")
     p_trading_intent_sync.add_argument("--timeout", type=float, default=30, help="Timeout seconds (default 30)")

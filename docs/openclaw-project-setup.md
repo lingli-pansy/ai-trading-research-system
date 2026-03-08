@@ -133,10 +133,9 @@ openclaw dashboard
 
 | 用途             | 入口 |
 |------------------|------|
-| 项目接入准备     | `AGENTS.md`，`skills/trading-approver/SKILL.md` |
-| OpenClaw 路径    | 将 **agent workspace** 设为本仓库根目录 |
-| 项目内 smoke     | `openclaw-approver-smoke --config configs/openclaw_agent.paper.yaml` |
-| 运行主链路       | `openclaw-agent-once --config configs/openclaw_agent.paper.yaml` |
+| **用户/agent 主入口** | 平台调用 `openclaw.bridge.handle_trading_intent_sync(message)`；本机 smoke 用 CLI：`openclaw-trading-intent-sync --message-json '{"message":"开始建仓"}'` |
+| 项目接入准备     | `AGENTS.md`，`skills/trading-approver/SKILL.md`，workspace = 本仓根目录 |
+| 开发/调试        | `openclaw-approver-smoke`、`openclaw-agent-once`、`openclaw-agent-loop`（见 AGENTS.md） |
 
 ---
 
