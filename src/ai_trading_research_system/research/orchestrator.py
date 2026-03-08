@@ -7,6 +7,7 @@ _env_path = Path(__file__).resolve().parents[3] / ".env"
 load_dotenv(_env_path)
 
 from ai_trading_research_system.data.providers import MockDataProvider, YFinanceProvider
+from ai_trading_research_system.data.market_data_service import get_market_data_service
 from ai_trading_research_system.research.schemas import ResearchContext, DecisionContract
 from ai_trading_research_system.research.agents.news_agent import NewsAgent
 from ai_trading_research_system.research.agents.fundamental_agent import FundamentalAgent
@@ -28,7 +29,8 @@ class ResearchOrchestrator:
         if data_provider is not None:
             self.data_provider = data_provider
         else:
-            self.data_provider = MockDataProvider() if use_mock else YFinanceProvider()
+            self.data_provider = MockDataProvider() if use_mock else YFinanceProvider(fallback_to_mock=False)
+        self.use_mock = use_mock
         if use_llm:
             self.agents = [LLMResearchAgent()]
         else:
@@ -43,11 +45,23 @@ class ResearchOrchestrator:
         self.synthesis = SynthesisAgent()
 
     def build_context(self, symbol: str) -> ResearchContext:
-        price = self.data_provider.get_price(symbol)
+        # 价格：主数据源为 MarketDataService（IB），research 场景允许 yfinance 补充；mock 时用 data_provider
+        if self.use_mock:
+            price = self.data_provider.get_price(symbol)
+        else:
+            price_snap = get_market_data_service(for_research=True).get_latest_price(symbol)
+            from ai_trading_research_system.data.models import PriceSnapshot
+            price = PriceSnapshot(
+                symbol=symbol,
+                last_price=price_snap.last_price,
+                change_pct=price_snap.change_pct,
+                volume_ratio=price_snap.volume_ratio,
+            )
         fundamentals = self.data_provider.get_fundamentals(symbol)
         news = self.data_provider.get_news(symbol)
 
-        price_summary = f"{symbol} last price {price.last_price}, daily change {price.change_pct:.1f}%, volume ratio {price.volume_ratio}."
+        vol_str = f", volume ratio {price.volume_ratio}" if price.volume_ratio is not None else ""
+        price_summary = f"{symbol} last price {price.last_price}, daily change {price.change_pct:.1f}%{vol_str}."
         rev = fundamentals.revenue_growth if fundamentals.revenue_growth is not None else 0.0
         gross = fundamentals.gross_margin if fundamentals.gross_margin is not None else 0.0
         pe = fundamentals.pe_ttm if fundamentals.pe_ttm is not None else 0.0

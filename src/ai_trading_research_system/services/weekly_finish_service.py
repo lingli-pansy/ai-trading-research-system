@@ -217,7 +217,7 @@ def finish_week(
         insights=insights.to_dict(),
     )
     # period already set above
-    market_data_source = "mock" if use_mock else "yfinance"
+    market_data_source = "mock" if use_mock else "ib"
     summary = build_weekly_result_summary(
         portfolio_return=portfolio_return,
         benchmark_return=benchmark_return,

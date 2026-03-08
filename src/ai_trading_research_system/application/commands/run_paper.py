@@ -45,8 +45,9 @@ def run_paper(
         price = 122.5
     else:
         try:
-            from ai_trading_research_system.data.providers import YFinanceProvider
-            price = YFinanceProvider().get_price(symbol).last_price
+            from ai_trading_research_system.data.market_data_service import get_market_data_service
+            snap = get_market_data_service(for_research=False).get_latest_price(symbol)
+            price = snap.last_price if snap.last_price > 0 else 122.5
         except Exception:
             price = 122.5
 

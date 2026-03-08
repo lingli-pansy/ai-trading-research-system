@@ -1,24 +1,18 @@
 """
-BacktestRunner: run NautilusTrader backtest with AISignalStrategy and yfinance history.
-Handles rate limiting: in-memory cache (reduce requests) + retry with backoff on 429.
+BacktestRunner: run NautilusTrader backtest with AISignalStrategy.
+历史数据来自 MarketDataService（IB Gateway）；不再直接使用 yfinance。
 """
 from __future__ import annotations
 
 import shutil
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
+from ai_trading_research_system.data.market_data_service import get_market_data_service
 from ai_trading_research_system.strategy.translator import AISignal
-
-# Cache (symbol, start, end) -> (timestamp, df); TTL 5 min to reduce yfinance calls and avoid rate limit
-_YF_HISTORY_CACHE: dict[tuple[str, str, str], tuple[float, pd.DataFrame]] = {}
-_YF_CACHE_TTL_SEC = 300.0
-_YF_RATE_LIMIT_RETRY_WAIT_SEC = 65
-_YF_RATE_LIMIT_MAX_RETRIES = 2
 
 
 @dataclass
@@ -67,42 +61,29 @@ def _build_equity(symbol: str, venue: str):
     )
 
 
-def _yfinance_history(symbol: str, start: str, end: str) -> pd.DataFrame:
-    import yfinance as yf
-    from yfinance.exceptions import YFRateLimitError
-
-    cache_key = (symbol, start, end)
-    now = time.monotonic()
-    if cache_key in _YF_HISTORY_CACHE:
-        ts, cached_df = _YF_HISTORY_CACHE[cache_key]
-        if now - ts <= _YF_CACHE_TTL_SEC:
-            return cached_df.copy()
-        del _YF_HISTORY_CACHE[cache_key]
-
-    ticker = yf.Ticker(symbol)
-    last_error: Exception | None = None
-    for attempt in range(_YF_RATE_LIMIT_MAX_RETRIES + 1):
-        try:
-            df = ticker.history(start=start, end=end, auto_adjust=True)
-            break
-        except YFRateLimitError as e:
-            last_error = e
-            if attempt < _YF_RATE_LIMIT_MAX_RETRIES:
-                time.sleep(_YF_RATE_LIMIT_RETRY_WAIT_SEC)
-            else:
-                raise
-    else:
-        if last_error is not None:
-            raise last_error
-        df = None
-
-    if df is None or df.empty:
+def _market_data_history(symbol: str, start: str, end: str) -> pd.DataFrame:
+    """从 MarketDataService（IB）拉取历史日线并转为 Nautilus 所需的 DataFrame。"""
+    try:
+        start_dt = pd.to_datetime(start)
+        end_dt = pd.to_datetime(end)
+        days = max(1, (end_dt - start_dt).days + 1)
+    except Exception:
+        days = 90
+    mds = get_market_data_service(for_research=False)
+    bars = mds.get_history(symbol, days, end_date=end or None)
+    if not bars:
         return pd.DataFrame()
-    df = df.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"})
+    df = pd.DataFrame(bars)
+    if "date" not in df.columns:
+        return pd.DataFrame()
+    df = df.rename(columns={"date": "timestamp"})
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df = df.set_index("timestamp")
+    for col in ("open", "high", "low", "close", "volume"):
+        if col not in df.columns:
+            df[col] = 0.0
     df = df[["open", "high", "low", "close", "volume"]]
-    df.index = pd.to_datetime(df.index)
     df.index.name = "timestamp"
-    _YF_HISTORY_CACHE[cache_key] = (time.monotonic(), df.copy())
     return df
 
 
@@ -130,7 +111,7 @@ def run_backtest(
     catalog_dir: Path | None = None,
 ) -> BacktestMetrics:
     """
-    Run backtest for symbol with given signal. Uses yfinance for history.
+    Run backtest for symbol with given signal. Uses MarketDataService (IB) for history.
     Returns sharpe, max_drawdown, win_rate, pnl, trade_count.
     """
     from nautilus_trader.model.data import BarType, BarSpecification
@@ -155,7 +136,7 @@ def run_backtest(
     bar_type = BarType(inst_id, bar_spec)
     wrangler = BarDataWrangler(bar_type, equity)
 
-    df = _yfinance_history(symbol, start_date, end_date)
+    df = _market_data_history(symbol, start_date, end_date)
     if df.empty:
         return BacktestMetrics(sharpe=0.0, max_drawdown=0.0, win_rate=0.0, pnl=0.0, trade_count=0)
 

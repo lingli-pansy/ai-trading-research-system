@@ -18,7 +18,7 @@ def get_benchmark_return(
     end_date: str | None = None,
     lookback_days: int = 5,
 ) -> tuple[float, str]:
-    """Return (benchmark_return_decimal, source). Source is 'yfinance' or 'mock'."""
+    """Return (benchmark_return_decimal, source). Source is 'ib' or 'mock'."""
     return get_benchmark_return_for_period(
         symbol=symbol,
         start_date=start_date,

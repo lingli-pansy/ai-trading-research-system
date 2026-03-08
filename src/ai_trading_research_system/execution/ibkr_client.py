@@ -1,7 +1,7 @@
 """
 IBKR Paper 客户端：连接 TWS/Gateway，下单（实盘前 L5）。
 依赖 ib_insync；仅当 IBKR_HOST/IBKR_PORT 配置且 run_paper 走 IBKR 路径时使用。
-ib_insync 为 asyncio，需在 asyncio.run() 内执行连接与下单。
+连接稳定性：使用 IBKR_CONNECT_TIMEOUT、断开后延迟 IBKR_DISCONNECT_DELAY，避免 Gateway 未释放 client id 即重连。
 """
 from __future__ import annotations
 
@@ -9,13 +9,10 @@ import asyncio
 import os
 from dataclasses import dataclass
 
-
-@dataclass
-class IBKROrderResult:
-    filled: bool
-    order_id: int | None
-    message: str
-    placed: bool = False  # True 表示订单已被经纪商接受（含 PendingSubmit/Submitted/Filled）
+# Gateway 在 disconnect 后不会立即释放 client id，短时间用同一 id 重连易导致 Error 1100 / socket closing
+# 连接+同步（positions/account 等）共用同一 timeout，默认 2 秒过短，改为 60；若仍见 "positions request timed out" 可调大
+_DEFAULT_CONNECT_TIMEOUT = 60
+_DEFAULT_DISCONNECT_DELAY = 1.0  # 断开后等待秒数再返回，便于 Gateway 释放
 
 
 def _host_port_client_id(host: str | None, port: int | None, client_id: int):
@@ -23,6 +20,20 @@ def _host_port_client_id(host: str | None, port: int | None, client_id: int):
     p = port if port is not None else int((os.environ.get("IBKR_PORT") or "4002").strip())
     cid = int(os.environ.get("IBKR_CLIENT_ID") or str(client_id))
     return h, p, cid
+
+
+def _connect_timeout() -> float:
+    try:
+        return float(os.environ.get("IBKR_CONNECT_TIMEOUT", _DEFAULT_CONNECT_TIMEOUT))
+    except (ValueError, TypeError):
+        return _DEFAULT_CONNECT_TIMEOUT
+
+
+def _disconnect_delay() -> float:
+    try:
+        return float(os.environ.get("IBKR_DISCONNECT_DELAY", _DEFAULT_DISCONNECT_DELAY))
+    except (ValueError, TypeError):
+        return _DEFAULT_DISCONNECT_DELAY
 
 
 async def _place_market_buy_async(
@@ -38,7 +49,7 @@ async def _place_market_buy_async(
     h, p, cid = _host_port_client_id(host, port, client_id)
     ib = IB()
     try:
-        await ib.connectAsync(h, p, clientId=cid)
+        await ib.connectAsync(h, p, clientId=cid, timeout=_connect_timeout())
         contract = Stock(symbol, "SMART", "USD")
         # 显式 TIF=DAY，避免 TWS order preset 导致 Error 10349 取消
         order = MarketOrder("BUY", round(quantity), tif="DAY")
@@ -63,6 +74,7 @@ async def _place_market_buy_async(
         return IBKROrderResult(filled=False, order_id=None, message=str(e), placed=False)
     finally:
         ib.disconnect()
+        await asyncio.sleep(_disconnect_delay())
 
 
 def place_market_buy(
@@ -90,12 +102,13 @@ async def _check_connected_async(
     h, p, cid = _host_port_client_id(host, port, client_id)
     ib = IB()
     try:
-        await ib.connectAsync(h, p, clientId=cid)
+        await ib.connectAsync(h, p, clientId=cid, timeout=_connect_timeout())
         return True
     except Exception:
         return False
     finally:
         ib.disconnect()
+        await asyncio.sleep(_disconnect_delay())
 
 
 def check_connected(host: str | None = None, port: int | None = None, client_id: int = 1) -> bool:
@@ -127,7 +140,7 @@ async def _get_account_snapshot_async(
     h, p, cid = _host_port_client_id(host, port, client_id)
     ib = IB()
     try:
-        await ib.connectAsync(h, p, clientId=cid)
+        await ib.connectAsync(h, p, clientId=cid, timeout=_connect_timeout())
         # 兼容：部分 ib_insync 版本有 accountSummaryAsync，否则用 executor 跑同步 accountSummary
         try:
             summary = await ib.accountSummaryAsync()
@@ -190,15 +203,32 @@ async def _get_account_snapshot_async(
         return None
     finally:
         ib.disconnect()
+        await asyncio.sleep(_disconnect_delay())
 
 
 def get_ibkr_account_snapshot_raw(
     host: str | None = None,
     port: int | None = None,
     client_id: int = 1,
+    retries: int = 2,
 ) -> IBKRAccountSnapshotRaw | None:
-    """同步封装：拉取 IBKR 账户快照，失败返回 None。"""
+    """同步封装：拉取 IBKR 账户快照。若有 IBKRSession 复用则用单连接；否则每次建连（支持重试）。"""
     try:
-        return asyncio.run(_get_account_snapshot_async(host=host, port=port, client_id=client_id))
+        from ai_trading_research_system.execution.ibkr_session import get_ibkr_session
+        session = get_ibkr_session()
+        if session is not None:
+            return session.get_account_snapshot_raw()
     except Exception:
-        return None
+        pass
+    last_err: Exception | None = None
+    for attempt in range(max(1, retries + 1)):
+        try:
+            out = asyncio.run(_get_account_snapshot_async(host=host, port=port, client_id=client_id))
+            if out is not None:
+                return out
+        except Exception as e:
+            last_err = e
+        if attempt < retries:
+            import time
+            time.sleep(2.0)
+    return None

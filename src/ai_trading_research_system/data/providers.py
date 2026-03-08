@@ -1,17 +1,34 @@
+import sys
 from datetime import datetime, timedelta
 from .models import NewsItem, FundamentalSnapshot, PriceSnapshot
 
 
+def _is_rate_limit(e: BaseException) -> bool:
+    try:
+        from yfinance.exceptions import YFRateLimitError
+        return type(e).__name__ == "YFRateLimitError" or isinstance(e, YFRateLimitError)
+    except ImportError:
+        return "Rate limit" in str(e) or "Too Many Requests" in str(e)
+
+
 class YFinanceProvider:
-    """Real-time price from yfinance; fundamentals and news fall back to mock for now.
-    On rate limit or request error, falls back to mock price so the pipeline still outputs a Contract.
+    """Real-time price from yfinance; fundamentals and news.
+    When fallback_to_mock=True (default), on rate limit or request error returns mock so pipeline still runs.
+    When fallback_to_mock=False (e.g. user passed --llm without --mock), raises on failure so no silent mock.
     """
+
+    def __init__(self, *, fallback_to_mock: bool = True) -> None:
+        self.fallback_to_mock = fallback_to_mock
 
     def get_price(self, symbol: str) -> PriceSnapshot:
         import sys
         try:
             import yfinance as yf
         except Exception as e:
+            if not self.fallback_to_mock:
+                if _is_rate_limit(e):
+                    print("Suggestion: wait a few minutes and retry, or run with --mock for local testing.", file=sys.stderr)
+                raise
             print(f"Warning: yfinance import failed ({e}), using mock price for {symbol}.", file=sys.stderr)
             return _fallback_price(symbol)
 
@@ -19,10 +36,16 @@ class YFinanceProvider:
             ticker = yf.Ticker(symbol)
             hist = ticker.history(period="5d")
         except Exception as e:
+            if not self.fallback_to_mock:
+                if _is_rate_limit(e):
+                    print("Suggestion: wait a few minutes and retry, or run with --mock for local testing.", file=sys.stderr)
+                raise
             print(f"Warning: yfinance request failed ({e}), using mock price for {symbol}.", file=sys.stderr)
             return _fallback_price(symbol)
 
         if hist is None or hist.empty:
+            if not self.fallback_to_mock:
+                raise RuntimeError(f"yfinance returned no history for {symbol}")
             return _fallback_price(symbol)
         try:
             last = hist.iloc[-1]
@@ -42,6 +65,10 @@ class YFinanceProvider:
                 volume_ratio=round(volume_ratio, 2) if volume_ratio is not None else None,
             )
         except Exception as e:
+            if not self.fallback_to_mock:
+                if _is_rate_limit(e):
+                    print("Suggestion: wait a few minutes and retry, or run with --mock for local testing.", file=sys.stderr)
+                raise
             print(f"Warning: yfinance parse failed ({e}), using mock price for {symbol}.", file=sys.stderr)
             return _fallback_price(symbol)
 
@@ -49,7 +76,9 @@ class YFinanceProvider:
         import sys
         try:
             import yfinance as yf
-        except Exception:
+        except Exception as e:
+            if not self.fallback_to_mock:
+                raise
             return _mock_fundamentals(symbol)
         try:
             ticker = yf.Ticker(symbol)
@@ -74,6 +103,10 @@ class YFinanceProvider:
                 notes=notes or None,
             )
         except Exception as e:
+            if not self.fallback_to_mock:
+                if _is_rate_limit(e):
+                    print("Suggestion: wait a few minutes and retry, or run with --mock for local testing.", file=sys.stderr)
+                raise
             print(f"Warning: yfinance fundamentals failed ({e}), using mock for {symbol}.", file=sys.stderr)
             return _mock_fundamentals(symbol)
 
@@ -81,7 +114,9 @@ class YFinanceProvider:
         import sys
         try:
             import yfinance as yf
-        except Exception:
+        except Exception as e:
+            if not self.fallback_to_mock:
+                raise
             return _mock_news(symbol)
         try:
             ticker = yf.Ticker(symbol)
@@ -108,9 +143,15 @@ class YFinanceProvider:
                     )
                 )
             if not out:
+                if not self.fallback_to_mock:
+                    raise RuntimeError(f"yfinance returned no news for {symbol}")
                 return _mock_news(symbol)
             return out
         except Exception as e:
+            if not self.fallback_to_mock:
+                if _is_rate_limit(e):
+                    print("Suggestion: wait a few minutes and retry, or run with --mock for local testing.", file=sys.stderr)
+                raise
             print(f"Warning: yfinance news failed ({e}), using mock for {symbol}.", file=sys.stderr)
             return _mock_news(symbol)
 
