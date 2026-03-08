@@ -16,7 +16,11 @@ from ai_trading_research_system.autonomous.adjustment_trigger import (
     TRIGGER_DRAWDOWN,
     TRIGGER_OPPORTUNITY_SPIKE,
     TRIGGER_RISK_EVENT,
+    TRIGGER_CONCENTRATION_RISK,
+    TRIGGER_BETA_SPIKE,
+    TRIGGER_EXCESS_DRAWDOWN,
 )
+from ai_trading_research_system.autonomous.portfolio_health import PortfolioHealthSnapshot
 from ai_trading_research_system.autonomous.weekly_report import WeeklyReportGenerator
 from ai_trading_research_system.autonomous.benchmark import BenchmarkResult
 from ai_trading_research_system.experience.store import write_intraday_trigger_event, get_connection
@@ -98,6 +102,115 @@ def test_risk_event_trigger():
     assert trigger is not None
     assert trigger.trigger_type == TRIGGER_RISK_EVENT
     assert trigger.severity == "high"
+
+
+def test_health_used_in_trigger_evaluator():
+    """evaluate_intraday_triggers 接受 portfolio_health；当无其他 trigger 时可按 health 触发。"""
+    snapshot = _snapshot(equity=10_000)
+    policy = PortfolioDecisionPolicy(minimum_score_gap_for_replacement=1.0, max_replacements_per_rebalance=2, turnover_budget=0.5)
+    # 低分、无风险事件、无回撤 -> 无 trigger；传入高 concentration 的 health -> concentration_risk_trigger
+    health = PortfolioHealthSnapshot(
+        portfolio_return=0.0,
+        benchmark_return=0.0,
+        excess_return=0.0,
+        volatility=0.1,
+        beta_vs_spy=1.0,
+        concentration_index=0.65,
+        max_drawdown=0.02,
+        current_positions=[],
+        timestamp="2024-01-01T12:00:00",
+    )
+    trigger = evaluate_intraday_triggers(
+        snapshot,
+        opportunity_ranking=[{"symbol": "A", "score": 0.2, "risk": "low"}],
+        current_positions={},
+        policy=policy,
+        drawdown_pct=2.0,
+        portfolio_health=health,
+    )
+    assert trigger is not None
+    assert trigger.trigger_type == TRIGGER_CONCENTRATION_RISK
+
+
+def test_concentration_trigger():
+    """concentration_index >= 0.6 时返回 concentration_risk_trigger。"""
+    snapshot = _snapshot(equity=10_000)
+    policy = PortfolioDecisionPolicy(minimum_score_gap_for_replacement=0.3, max_replacements_per_rebalance=2, turnover_budget=0.5)
+    health = PortfolioHealthSnapshot(
+        portfolio_return=0.0,
+        benchmark_return=0.0,
+        excess_return=0.0,
+        volatility=0.1,
+        beta_vs_spy=0.9,
+        concentration_index=0.7,
+        max_drawdown=0.01,
+        current_positions=[],
+        timestamp="2024-01-01T12:00:00",
+    )
+    trigger = evaluate_intraday_triggers(
+        snapshot,
+        opportunity_ranking=[{"symbol": "A", "score": 0.5, "risk": "low"}],
+        current_positions={},
+        policy=policy,
+        portfolio_health=health,
+    )
+    assert trigger is not None
+    assert trigger.trigger_type == TRIGGER_CONCENTRATION_RISK
+    assert "concentration" in trigger.trigger_reason.lower() or "0.7" in trigger.trigger_reason
+
+
+def test_beta_trigger():
+    """beta_vs_spy >= 1.5 时返回 beta_spike_trigger。"""
+    snapshot = _snapshot(equity=10_000)
+    policy = PortfolioDecisionPolicy(minimum_score_gap_for_replacement=0.3, max_replacements_per_rebalance=2, turnover_budget=0.5)
+    health = PortfolioHealthSnapshot(
+        portfolio_return=0.0,
+        benchmark_return=0.0,
+        excess_return=0.0,
+        volatility=0.2,
+        beta_vs_spy=1.6,
+        concentration_index=0.3,
+        max_drawdown=0.02,
+        current_positions=[],
+        timestamp="2024-01-01T12:00:00",
+    )
+    trigger = evaluate_intraday_triggers(
+        snapshot,
+        opportunity_ranking=[{"symbol": "A", "score": 0.5, "risk": "low"}],
+        current_positions={},
+        policy=policy,
+        portfolio_health=health,
+    )
+    assert trigger is not None
+    assert trigger.trigger_type == TRIGGER_BETA_SPIKE
+    assert "beta" in trigger.trigger_reason.lower() or "1.5" in trigger.trigger_reason or "1.6" in trigger.trigger_reason
+
+
+def test_excess_drawdown_trigger():
+    """max_drawdown >= 0.05 时返回 excess_drawdown_trigger。"""
+    snapshot = _snapshot(equity=10_000)
+    policy = PortfolioDecisionPolicy(minimum_score_gap_for_replacement=0.3, max_replacements_per_rebalance=2, turnover_budget=0.5)
+    health = PortfolioHealthSnapshot(
+        portfolio_return=-0.03,
+        benchmark_return=0.0,
+        excess_return=-0.03,
+        volatility=0.15,
+        beta_vs_spy=1.0,
+        concentration_index=0.4,
+        max_drawdown=0.06,
+        current_positions=[],
+        timestamp="2024-01-01T12:00:00",
+    )
+    trigger = evaluate_intraday_triggers(
+        snapshot,
+        opportunity_ranking=[{"symbol": "A", "score": 0.5, "risk": "low"}],
+        current_positions={},
+        policy=policy,
+        portfolio_health=health,
+    )
+    assert trigger is not None
+    assert trigger.trigger_type == TRIGGER_EXCESS_DRAWDOWN
+    assert "drawdown" in trigger.trigger_reason.lower()
 
 
 def test_no_adjustment_without_trigger():

@@ -8,6 +8,18 @@ from ai_trading_research_system.autonomous.schemas import AccountSnapshot, Weekl
 from ai_trading_research_system.autonomous.portfolio_policy import default_policy
 
 
+def _health_float(health: Any, key: str) -> float | None:
+    if health is None:
+        return None
+    v = getattr(health, key, None) if not isinstance(health, dict) else health.get(key)
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
 @dataclass
 class AllocationResult:
     target_positions: list[dict[str, Any]]
@@ -36,6 +48,7 @@ class PortfolioAllocator:
         mandate: WeeklyTradingMandate,
         signals: list[dict[str, Any]] | None = None,
         wait_confirmation: bool = False,
+        portfolio_health: Any = None,
     ) -> AllocationResult:
         if wait_confirmation:
             return AllocationResult(
@@ -56,6 +69,19 @@ class PortfolioAllocator:
             )
 
         policy = getattr(mandate, "policy", None) or default_policy()
+        effective_min_gap = policy.minimum_score_gap_for_replacement
+        effective_max_replacements = policy.max_replacements_per_rebalance
+        if portfolio_health is not None:
+            conc = _health_float(portfolio_health, "concentration_index")
+            beta = _health_float(portfolio_health, "beta_vs_spy")
+            md = _health_float(portfolio_health, "max_drawdown")
+            if conc is not None and conc >= 0.6:
+                effective_max_replacements = max(0, effective_max_replacements - 1)
+            if beta is not None and beta >= 1.5:
+                effective_min_gap = effective_min_gap * 1.5
+            if md is not None and md >= 0.05:
+                effective_min_gap = effective_min_gap * 1.2
+                effective_max_replacements = min(effective_max_replacements, 0)
         cash_reserve = account_snapshot.total_equity() * mandate.cash_reserve_pct
         current_positions = {p.get("symbol"): p for p in (account_snapshot.positions or []) if p.get("symbol")}
         has_scores = any(s.get("score") is not None for s in signals)
@@ -108,7 +134,7 @@ class PortfolioAllocator:
                 weakest_score = float(weakest.get("score", 0) or 0)
                 if has_scores:
                     gap = score - weakest_score
-                    gap_required = policy.minimum_score_gap_for_replacement
+                    gap_required = effective_min_gap
                     if weakest_score >= policy.retain_threshold:
                         gap_required += max(0.0, weakest_score - policy.retain_threshold)
                     if gap < gap_required:
@@ -122,7 +148,7 @@ class PortfolioAllocator:
                 else:
                     if score <= weakest_score:
                         continue
-                if has_scores and len(replacement_decisions) >= policy.max_replacements_per_rebalance:
+                if has_scores and len(replacement_decisions) >= effective_max_replacements:
                     replacements_skipped_budget += 1
                     rejected_opportunities.append({
                         "symbol": symbol,
@@ -171,7 +197,7 @@ class PortfolioAllocator:
             for i, t in enumerate(in_list):
                 if i >= len(out_list):
                     break
-                if len(replacement_decisions) >= policy.max_replacements_per_rebalance:
+                if len(replacement_decisions) >= effective_max_replacements:
                     replacements_skipped_budget += 1
                     rejected_opportunities.append({
                         "symbol": t["symbol"],
@@ -185,7 +211,7 @@ class PortfolioAllocator:
                 new_score = float(t.get("score", 0) or 0)
                 weakest_score = 0.0
                 gap = new_score - weakest_score
-                gap_required = policy.minimum_score_gap_for_replacement
+                gap_required = effective_min_gap
                 if gap < gap_required:
                     replacements_skipped_threshold += 1
                     rejected_opportunities.append({
@@ -230,6 +256,8 @@ class PortfolioAllocator:
 
         policy_summary: dict[str, Any] = {
             "score_gap_used": score_gap_used,
+            "effective_min_gap": effective_min_gap,
+            "effective_max_replacements": effective_max_replacements,
             "replacements_executed": len(replacement_decisions),
             "replacements_skipped_due_to_threshold": replacements_skipped_threshold,
             "replacements_skipped_due_to_budget": replacements_skipped_budget,

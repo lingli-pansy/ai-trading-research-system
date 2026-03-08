@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from ai_trading_research_system.autonomous.benchmark import (
     get_benchmark_return_for_period,
+    get_benchmark_series,
     BenchmarkComparator,
     BenchmarkResult,
 )
@@ -24,6 +25,14 @@ def get_benchmark_return(
         end_date=end_date,
         lookback_days=lookback_days,
     )
+
+
+def get_benchmark_returns_and_volatility(
+    symbol: str = "SPY",
+    lookback_days: int = 5,
+) -> tuple[list[float], float, float, float]:
+    """Return (daily_returns, total_return, volatility_annualized, max_drawdown)."""
+    return get_benchmark_series(symbol=symbol, lookback_days=lookback_days)
 
 
 def compare_to_benchmark(

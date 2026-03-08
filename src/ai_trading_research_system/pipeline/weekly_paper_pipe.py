@@ -24,9 +24,14 @@ from ai_trading_research_system.execution.nautilus_paper_runner import NautilusP
 from ai_trading_research_system.services.experience_service import write_weekly_run
 from ai_trading_research_system.services.weekly_finish_service import finish_week
 from ai_trading_research_system.services.regime_context import get_regime_context
-from ai_trading_research_system.services.benchmark_service import get_benchmark_return
-from ai_trading_research_system.experience.store import write_intraday_trigger_event
+from ai_trading_research_system.services.benchmark_service import get_benchmark_return, get_benchmark_returns_and_volatility
+from ai_trading_research_system.experience.store import write_intraday_trigger_event, write_health_trigger_event
 from ai_trading_research_system.autonomous.portfolio_health import evaluate_portfolio_health
+from ai_trading_research_system.autonomous.adjustment_trigger import (
+    TRIGGER_CONCENTRATION_RISK,
+    TRIGGER_BETA_SPIKE,
+    TRIGGER_EXCESS_DRAWDOWN,
+)
 
 
 @dataclass
@@ -85,6 +90,8 @@ def run_weekly_autonomous_paper(
     rejected_opportunities_week: list[dict[str, Any]] = []
     policy_summary_week: dict[str, Any] = {}
     intraday_adjustments_week: list[dict[str, Any]] = []
+    health_based_adjustments_week: list[dict[str, Any]] = []
+    portfolio_returns_list: list[float] = []
 
     spy_trend, vix_level = get_regime_context(use_mock)
     current_positions = {p.get("symbol"): p for p in (snapshot.positions or []) if p.get("symbol")}
@@ -124,17 +131,51 @@ def run_weekly_autonomous_paper(
                 "score": o.score,
             })
         opportunity_ranking_week = [{"symbol": o.symbol, "score": o.score, "confidence": o.confidence, "risk": o.risk} for o in ranked]
+        spy_returns, bench_ret_day, vol_day, max_dd_day = get_benchmark_returns_and_volatility(
+            symbol=benchmark, lookback_days=min(max(day + 1, 2), 21)
+        )
+        n = min(len(portfolio_returns_list), len(spy_returns))
+        portfolio_returns_aligned = portfolio_returns_list[-n:] if n else []
+        spy_aligned = spy_returns[-n:] if n else []
+        benchmark_data_day = {
+            "benchmark_return": bench_ret_day,
+            "volatility": vol_day,
+            "max_drawdown": max_dd_day,
+            "portfolio_returns": portfolio_returns_aligned,
+            "spy_returns": spy_aligned,
+        }
+        health_day = evaluate_portfolio_health(
+            snapshot, benchmark_data_day, snapshot.positions or [], initial_equity=capital
+        )
         trigger = evaluate_intraday_triggers(
             snapshot,
             opportunity_ranking_week,
             current_positions,
             mandate.policy,
             initial_equity=capital,
+            portfolio_health=health_day,
         )
         if trigger is None:
             no_trade_reasons.append("no_trigger")
             continue
-        alloc_result: AllocationResult = allocator.allocate(snapshot, mandate, signals, wait_confirmation=wait_any)
+        if trigger.trigger_type in (TRIGGER_CONCENTRATION_RISK, TRIGGER_BETA_SPIKE, TRIGGER_EXCESS_DRAWDOWN):
+            health_based_adjustments_week.append({
+                "trigger_type": trigger.trigger_type,
+                "trigger_reason": trigger.trigger_reason,
+                "severity": trigger.severity,
+                "period": f"day_{day}",
+            })
+            write_health_trigger_event(
+                mandate_id=mandate.mandate_id,
+                period=f"day_{day}",
+                trigger_type=trigger.trigger_type,
+                trigger_reason=trigger.trigger_reason,
+                severity=trigger.severity,
+                health_snapshot_excerpt=health_day.to_dict(),
+            )
+        alloc_result: AllocationResult = allocator.allocate(
+            snapshot, mandate, signals, wait_confirmation=wait_any, portfolio_health=health_day
+        )
         replacement_decisions_week.extend(alloc_result.replacement_decisions)
         positions_changed = [t.get("symbol") for t in alloc_result.target_positions if t.get("symbol")]
         intraday_adjustments_week.append({
@@ -203,14 +244,27 @@ def run_weekly_autonomous_paper(
             run_ids.append(run_id)
         total_pnl += day_pnl
         total_trades += day_trades
+        portfolio_returns_list.append(day_pnl / capital if capital else 0.0)
 
     sm.complete_week()
     report_dir = report_dir or Path(".")
     turnover_pct = min(100.0, 10.0 * total_trades) if total_trades else 0.0
-    benchmark_return_week, _ = get_benchmark_return(symbol=benchmark, lookback_days=duration_days)
+    spy_returns_week, benchmark_return_week, vol_week, max_dd_week = get_benchmark_returns_and_volatility(
+        symbol=benchmark, lookback_days=max(duration_days, 2)
+    )
+    n_week = min(len(portfolio_returns_list), len(spy_returns_week))
+    portfolio_returns_week = portfolio_returns_list[-n_week:] if n_week else []
+    spy_week = spy_returns_week[-n_week:] if n_week else []
+    benchmark_data_week = {
+        "benchmark_return": benchmark_return_week,
+        "volatility": vol_week,
+        "max_drawdown": max_dd_week,
+        "portfolio_returns": portfolio_returns_week,
+        "spy_returns": spy_week,
+    }
     health = evaluate_portfolio_health(
         snapshot,
-        {"benchmark_return": benchmark_return_week, "max_drawdown": 0.0},
+        benchmark_data_week,
         snapshot.positions or [],
         initial_equity=capital,
     )
@@ -239,4 +293,5 @@ def run_weekly_autonomous_paper(
         policy_summary=policy_summary_week,
         intraday_adjustments=intraday_adjustments_week,
         portfolio_health=portfolio_health,
+        health_based_adjustments=health_based_adjustments_week,
     )

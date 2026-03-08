@@ -37,7 +37,8 @@ class WeeklyReport:
     replacements_skipped_due_to_budget: int = 0
     policy_used: dict[str, Any] = field(default_factory=dict)  # minimum_score_gap, max_replacements, turnover_budget
     intraday_adjustments: list[dict[str, Any]] = field(default_factory=list)  # trigger_type, positions_changed, rationale
-    portfolio_health: dict[str, Any] = field(default_factory=dict)  # volatility, beta_vs_spy, concentration, drawdown
+    portfolio_health: dict[str, Any] = field(default_factory=dict)  # portfolio_health_snapshot
+    health_based_adjustments: list[dict[str, Any]] = field(default_factory=list)  # 因健康监控触发的调整，便于区分
 
 
 class WeeklyReportGenerator:
@@ -63,6 +64,7 @@ class WeeklyReportGenerator:
         policy_used: dict[str, Any] | None = None,
         intraday_adjustments: list[dict[str, Any]] | None = None,
         portfolio_health: dict[str, Any] | None = None,
+        health_based_adjustments: list[dict[str, Any]] | None = None,
     ) -> WeeklyReport:
         key_trades = key_trades or []
         risk_events = risk_events or []
@@ -81,6 +83,7 @@ class WeeklyReportGenerator:
         policy_used = policy_used or {}
         intraday_adjustments = intraday_adjustments or []
         portfolio_health = portfolio_health or {}
+        health_based_adjustments = health_based_adjustments or []
         if benchmark_result.excess_return > 0.02:
             suggestion = "组合跑赢基准，可维持当前风险偏好。"
         elif benchmark_result.trade_count == 0:
@@ -112,6 +115,7 @@ class WeeklyReportGenerator:
             policy_used=policy_used,
             intraday_adjustments=intraday_adjustments,
             portfolio_health=portfolio_health,
+            health_based_adjustments=health_based_adjustments,
         )
 
     def to_dict(self, report: WeeklyReport) -> dict[str, Any]:

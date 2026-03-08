@@ -72,6 +72,7 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             replaced_positions TEXT,
             retained_positions TEXT,
             policy_snapshot TEXT,
+            health_adjustment_summary TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
         CREATE TABLE IF NOT EXISTS intraday_trigger_events (
@@ -91,10 +92,24 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             snapshot_json TEXT NOT NULL,
             created_at TEXT DEFAULT (datetime('now'))
         );
+        CREATE TABLE IF NOT EXISTS health_trigger_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mandate_id TEXT NOT NULL,
+            period TEXT NOT NULL,
+            trigger_type TEXT NOT NULL,
+            trigger_reason TEXT,
+            severity TEXT,
+            health_snapshot_excerpt TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
     """)
     # Migration: add policy_snapshot if missing (existing DBs)
     try:
         conn.execute("ALTER TABLE weekly_portfolio_experience ADD COLUMN policy_snapshot TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("ALTER TABLE weekly_portfolio_experience ADD COLUMN health_adjustment_summary TEXT")
     except sqlite3.OperationalError:
         pass
 
@@ -125,6 +140,40 @@ def write_intraday_trigger_event(
                 trigger_reason,
                 severity,
                 json.dumps(positions_changed or [], ensure_ascii=False),
+            ),
+        )
+        conn.commit()
+        return cur.lastrowid or 0
+    finally:
+        conn.close()
+
+
+def write_health_trigger_event(
+    mandate_id: str,
+    period: str,
+    trigger_type: str,
+    trigger_reason: str,
+    severity: str,
+    *,
+    health_snapshot_excerpt: dict[str, Any] | None = None,
+    db_path: Path | None = None,
+) -> int:
+    """Write one health_trigger_events row (concentration_risk / beta_spike / excess_drawdown). Returns row id."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO health_trigger_events (mandate_id, period, trigger_type, trigger_reason, severity, health_snapshot_excerpt)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                mandate_id,
+                period,
+                trigger_type,
+                trigger_reason,
+                severity,
+                json.dumps(health_snapshot_excerpt or {}, ensure_ascii=False),
             ),
         )
         conn.commit()
@@ -276,16 +325,17 @@ def write_weekly_portfolio_experience(
     replaced_positions: list[dict[str, Any]] | None = None,
     retained_positions: list[dict[str, Any]] | None = None,
     policy_snapshot: dict[str, Any] | None = None,
+    health_adjustment_summary: list[dict[str, Any]] | dict[str, Any] | None = None,
     db_path: Path | None = None,
 ) -> int:
-    """Write one weekly_portfolio_experience row. policy_snapshot: score_gap_used, replacements_executed, replacements_skipped, rejected_due_to_threshold. Returns row id."""
+    """Write one weekly_portfolio_experience row. policy_snapshot: score_gap_used, replacements_executed, etc. health_adjustment_summary: 当周健康触发的汇总。"""
     conn = get_connection(db_path)
     try:
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO weekly_portfolio_experience (mandate_id, period, top_opportunity_scores, replaced_positions, retained_positions, policy_snapshot)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO weekly_portfolio_experience (mandate_id, period, top_opportunity_scores, replaced_positions, retained_positions, policy_snapshot, health_adjustment_summary)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 mandate_id,
@@ -294,6 +344,7 @@ def write_weekly_portfolio_experience(
                 json.dumps(replaced_positions or [], ensure_ascii=False),
                 json.dumps(retained_positions or [], ensure_ascii=False),
                 json.dumps(policy_snapshot or {}, ensure_ascii=False),
+                json.dumps(health_adjustment_summary if isinstance(health_adjustment_summary, (list, dict)) else (health_adjustment_summary or []), ensure_ascii=False),
             ),
         )
         conn.commit()

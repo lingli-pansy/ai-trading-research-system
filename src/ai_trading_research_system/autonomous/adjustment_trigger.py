@@ -11,6 +11,9 @@ from datetime import datetime, timezone
 TRIGGER_DRAWDOWN = "drawdown_trigger"
 TRIGGER_OPPORTUNITY_SPIKE = "opportunity_spike_trigger"
 TRIGGER_RISK_EVENT = "risk_event_trigger"
+TRIGGER_CONCENTRATION_RISK = "concentration_risk_trigger"
+TRIGGER_BETA_SPIKE = "beta_spike_trigger"
+TRIGGER_EXCESS_DRAWDOWN = "excess_drawdown_trigger"
 
 
 @dataclass

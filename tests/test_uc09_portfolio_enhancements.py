@@ -12,6 +12,7 @@ import pytest
 from ai_trading_research_system.autonomous.allocator import PortfolioAllocator, AllocationResult
 from ai_trading_research_system.autonomous.schemas import AccountSnapshot, WeeklyTradingMandate
 from ai_trading_research_system.autonomous.weekly_report import WeeklyReportGenerator
+from ai_trading_research_system.autonomous.portfolio_health import PortfolioHealthSnapshot
 from ai_trading_research_system.autonomous.benchmark import BenchmarkResult
 from ai_trading_research_system.autonomous.portfolio_policy import PortfolioDecisionPolicy
 from ai_trading_research_system.services.experience_service import write_weekly_run
@@ -30,6 +31,66 @@ def test_uc09_accepts_multiple_symbols():
     assert result.ok is True
     assert result.mandate_id
     assert "report_path" in result.summary or result.report_path
+
+
+def test_allocator_respects_health_state():
+    """Allocator 接收 portfolio_health 时收紧策略：高 concentration 降低 max_replacements，高 beta 提高 min_gap，高 drawdown 进一步收紧。"""
+    snapshot = AccountSnapshot(
+        cash=3000,
+        equity=10000,
+        positions=[
+            {"symbol": "A", "quantity": 10, "market_value": 3500},
+            {"symbol": "B", "quantity": 10, "market_value": 3500},
+        ],
+        open_orders=[],
+        risk_budget=1000,
+        timestamp="2024-01-01T00:00:00",
+        source="mock",
+    )
+    mandate = WeeklyTradingMandate(
+        mandate_id="m1",
+        capital_limit=10000,
+        max_positions=2,
+        watchlist=["NVDA", "AAPL"],
+    )
+    allocator = PortfolioAllocator(max_position_pct=0.4)
+    signals = [
+        {"symbol": "A", "size_fraction": 0.4, "rationale": "hold", "score": 0.6},
+        {"symbol": "B", "size_fraction": 0.4, "rationale": "hold", "score": 0.5},
+        {"symbol": "NVDA", "size_fraction": 0.4, "rationale": "new", "score": 0.95},
+    ]
+    out_baseline = allocator.allocate(snapshot, mandate, signals, wait_confirmation=False)
+    health_high_conc = PortfolioHealthSnapshot(
+        portfolio_return=0.0,
+        benchmark_return=0.0,
+        excess_return=0.0,
+        volatility=0.1,
+        beta_vs_spy=1.0,
+        concentration_index=0.7,
+        max_drawdown=0.02,
+        current_positions=snapshot.positions or [],
+        timestamp="2024-01-01T12:00:00",
+    )
+    out_health = allocator.allocate(snapshot, mandate, signals, wait_confirmation=False, portfolio_health=health_high_conc)
+    assert "effective_max_replacements" in out_health.policy_summary
+    assert "effective_min_gap" in out_health.policy_summary
+    # 高 concentration 应使 effective_max_replacements <= policy.max_replacements_per_rebalance (2)
+    assert out_health.policy_summary["effective_max_replacements"] <= 2
+    # 高 drawdown 时 effective_max_replacements 可被压为 0
+    health_high_dd = PortfolioHealthSnapshot(
+        portfolio_return=-0.05,
+        benchmark_return=0.0,
+        excess_return=-0.05,
+        volatility=0.2,
+        beta_vs_spy=1.0,
+        concentration_index=0.3,
+        max_drawdown=0.08,
+        current_positions=snapshot.positions or [],
+        timestamp="2024-01-01T12:00:00",
+    )
+    out_dd = allocator.allocate(snapshot, mandate, signals, wait_confirmation=False, portfolio_health=health_high_dd)
+    assert out_dd.policy_summary.get("effective_max_replacements") == 0
+    assert out_dd.policy_summary.get("effective_min_gap", 0) >= 0.3
 
 
 def test_allocator_replacement_decisions():
@@ -134,6 +195,42 @@ def test_experience_store_writes_regime_fields():
             assert params.get("vix_level") == "low"
         finally:
             os.environ.pop("EXPERIENCE_DB_PATH", None)
+
+
+def test_health_adjustments_recorded_in_report():
+    """周报区分 portfolio_health_snapshot 与 health_based_adjustments，健康触发的调整单独列出。"""
+    mandate = WeeklyTradingMandate(mandate_id="m1", watchlist=["NVDA"])
+    bench = BenchmarkResult(
+        portfolio_return=0.0,
+        benchmark_return=0.0,
+        excess_return=0.0,
+        max_drawdown=0.0,
+        trade_count=0,
+        period="day_0_to_5",
+        benchmark_source="mock",
+    )
+    portfolio_health = {"volatility": 0.12, "beta_vs_spy": 1.1, "concentration_index": 0.5, "max_drawdown": 0.02}
+    health_based_adjustments = [
+        {"trigger_type": "concentration_risk_trigger", "period": "day_1", "trigger_reason": "concentration_index_0.65_gte_0.6", "severity": "medium"},
+        {"trigger_type": "beta_spike_trigger", "period": "day_2", "trigger_reason": "beta_vs_spy_1.6_gte_1.5", "severity": "high"},
+    ]
+    gen = WeeklyReportGenerator()
+    report = gen.generate(
+        mandate,
+        bench,
+        key_trades=[],
+        turnover_pct=0.0,
+        portfolio_health=portfolio_health,
+        health_based_adjustments=health_based_adjustments,
+    )
+    assert getattr(report, "portfolio_health", None) == portfolio_health
+    assert getattr(report, "health_based_adjustments", None) == health_based_adjustments
+    d = gen.to_dict(report)
+    assert "portfolio_health" in d
+    assert "health_based_adjustments" in d
+    assert len(d["health_based_adjustments"]) == 2
+    assert d["health_based_adjustments"][0]["trigger_type"] == "concentration_risk_trigger"
+    assert d["health_based_adjustments"][1]["trigger_type"] == "beta_spike_trigger"
 
 
 def test_weekly_report_records_policy():

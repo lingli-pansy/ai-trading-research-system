@@ -46,6 +46,7 @@ def finish_week(
     policy_summary: dict[str, Any] | None = None,
     intraday_adjustments: list[dict[str, Any]] | None = None,
     portfolio_health: dict[str, Any] | None = None,
+    health_based_adjustments: list[dict[str, Any]] | None = None,
 ) -> Any:
     """
     After execution loop: compute benchmark, write report, build summary, return WeeklyPaperResult.
@@ -91,6 +92,7 @@ def finish_week(
         replacements_skipped_due_to_budget=policy_summary.get("replacements_skipped_due_to_budget", 0),
         intraday_adjustments=intraday_adjustments or [],
         portfolio_health=portfolio_health or {},
+        health_based_adjustments=health_based_adjustments or [],
     )
     period = f"day_0_to_{duration_days}"
     if portfolio_health:
@@ -108,6 +110,10 @@ def finish_week(
         experience_policy["max_replacements_per_rebalance"] = policy_obj.max_replacements_per_rebalance
         experience_policy["turnover_budget"] = policy_obj.turnover_budget
         experience_policy["retain_threshold"] = policy_obj.retain_threshold
+    health_adj_summary = [
+        {"trigger_type": a.get("trigger_type"), "period": a.get("period"), "reason": a.get("trigger_reason"), "severity": a.get("severity")}
+        for a in (health_based_adjustments or [])
+    ]
     write_weekly_portfolio_experience(
         mandate_id=mandate.mandate_id,
         period=period,
@@ -115,6 +121,7 @@ def finish_week(
         replaced_positions=replacement_decisions or [],
         retained_positions=retained_positions or [],
         policy_snapshot=experience_policy,
+        health_adjustment_summary=health_adj_summary,
     )
     market_data_source = "mock" if use_mock else "yfinance"
     summary = build_weekly_result_summary(
