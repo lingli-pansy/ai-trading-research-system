@@ -17,6 +17,11 @@ dependencies = [
   "ib_insync>=0.9.86",
 ]
 
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0,<9",
+]
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 

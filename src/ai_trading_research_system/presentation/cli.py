@@ -94,70 +94,23 @@ def main() -> int:
 
     if args.command == "backtest":
         result = run_backtest_symbol(args.symbol, args.start, args.end, use_mock=args.mock, use_llm=args.llm)
-        print("=== BACKTEST RESULT ===")
-        print(f"symbol: {args.symbol}")
-        print(f"contract action: {result.contract.suggested_action} (confidence: {result.contract.confidence})")
-        print(f"sharpe: {result.metrics.sharpe:.4f}  max_drawdown: {result.metrics.max_drawdown:.4f}")
-        print(f"win_rate: {result.metrics.win_rate:.4f}  pnl: {result.metrics.pnl:.2f}  trades: {result.metrics.trade_count}")
-        print(f"strategy_run_id: {result.strategy_run_id}")
+        from ai_trading_research_system.presentation.renderers import render_backtest
+        for line in render_backtest(result, args.symbol):
+            print(line)
         return 0
 
     if args.command == "paper":
         result = run_paper(args.symbol, once=args.once, use_mock=args.mock, use_llm=args.llm, project_root=PROJECT_ROOT)
-        if result.paused:
-            print("Paper 已暂停：STOP_PAPER=1 或存在 .paper_stop（Kill Switch）")
-            return 1
-        header = "=== PAPER RESULT (IBKR) ===" if result.use_ibkr else "=== PAPER RESULT ==="
-        print(header)
-        print(f"symbol: {result.symbol}")
-        print(f"contract: {result.contract_action} (confidence: {result.contract_confidence})")
-        print(f"signal: {result.signal_action} size_fraction={result.allowed_position_size}")
-        print(f"price: {result.price}")
-        if result.order_done is not None:
-            print(f"order_done: {result.order_done} message: {result.message}")
-            if result.order_result and hasattr(result.order_result, "status"):
-                o = result.order_result
-                print(f"  order: {getattr(o, 'status', '')} qty={getattr(o, 'quantity', '')} price={getattr(o, 'price', '')}")
-        return 0
+        from ai_trading_research_system.presentation.renderers import render_paper
+        for line in render_paper(result):
+            print(line)
+        return 1 if result.paused else 0
 
     if args.command == "demo":
         result = run_demo(args.symbol, use_mock=args.mock, use_llm=args.llm)
-        contract = result.contract
-        metrics = result.metrics
-        run_id = result.strategy_run_id
-        from ai_trading_research_system.strategy.translator import ContractTranslator
-        signal = ContractTranslator().translate(contract)
-        thesis_preview = (contract.thesis or "")[:400]
-        if len(contract.thesis or "") > 400:
-            thesis_preview += "..."
-        print("=" * 60)
-        print("【1】研究结论")
-        print("=" * 60)
-        print(f"thesis: {thesis_preview}")
-        print(f"key_drivers: {contract.key_drivers}")
-        print(f"confidence: {contract.confidence}  suggested_action: {contract.suggested_action}")
-        print(f"time_horizon: {contract.time_horizon}")
-        if contract.uncertainties:
-            print(f"uncertainties: {contract.uncertainties}")
-        print()
-        print("=" * 60)
-        print("【2】策略生成")
-        print("=" * 60)
-        print(f"action: {signal.action}  allowed_position_size: {signal.allowed_position_size}")
-        print(f"rationale: {signal.rationale}")
-        print()
-        print("=" * 60)
-        print("【3】回测结果")
-        print("=" * 60)
-        print(f"sharpe: {metrics.sharpe:.4f}  max_drawdown: {metrics.max_drawdown:.4f}")
-        print(f"win_rate: {metrics.win_rate:.4f}  pnl: {metrics.pnl:.2f}  trade_count: {metrics.trade_count}")
-        print()
-        print("=" * 60)
-        print("【4】交易总结")
-        print("=" * 60)
-        print("执行引擎: NautilusTrader（回测 + Paper 默认主线）。")
-        print(f"本轮研究+回测已写入 Experience Store，strategy_run_id={run_id}。")
-        print(f"结论: {contract.suggested_action}（置信度 {contract.confidence}），策略信号 {signal.action}，回测 {metrics.trade_count} 笔，pnl={metrics.pnl:.2f}。")
+        from ai_trading_research_system.presentation.renderers import render_demo
+        for line in render_demo(result, args.symbol):
+            print(line)
         return 0
 
     if args.command == "weekly-paper":

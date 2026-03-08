@@ -1,7 +1,8 @@
 """
-Skill interface: execute research / backtest / paper / demo for OpenClaw Skill.
-Skill can call execute() (Python API) or invoke cli.py via subprocess; this module provides the API path
-so that output format matches openclaw_integration.md and is JSON-serializable for Agent.
+COMPATIBILITY LAYER — Do not use for new code.
+
+Skill interface: execute routed command and return JSON.
+Canonical path: openclaw.adapter.run_*_report() / openclaw.commands.*.
 """
 from __future__ import annotations
 

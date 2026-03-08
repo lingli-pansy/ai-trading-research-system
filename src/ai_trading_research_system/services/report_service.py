@@ -41,3 +41,32 @@ def generate_and_write(
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(gen.to_dict(report), f, ensure_ascii=False, indent=2)
     return str(report_path)
+
+
+def build_weekly_result_summary(
+    *,
+    portfolio_return: float,
+    benchmark_return: float,
+    excess_return: float,
+    total_trades: int,
+    total_pnl: float,
+    report_path: str,
+    daily_research_count: int,
+    snapshot_source: str,
+    market_data_source: str,
+    benchmark_source: str,
+) -> dict[str, Any]:
+    """Build the summary dict for WeeklyPaperResult. Used by weekly_paper_pipe only for result assembly."""
+    return {
+        "portfolio_return": portfolio_return,
+        "benchmark_return": benchmark_return,
+        "excess_return": excess_return,
+        "trade_count": total_trades,
+        "pnl": total_pnl,
+        "report_path": report_path,
+        "daily_research_count": daily_research_count,
+        "analysis_in_report": True,
+        "snapshot_source": snapshot_source,
+        "market_data_source": market_data_source,
+        "benchmark_source": benchmark_source,
+    }

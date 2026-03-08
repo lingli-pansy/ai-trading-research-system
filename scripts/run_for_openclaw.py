@@ -25,15 +25,7 @@ from ai_trading_research_system.openclaw.adapter import (
     run_demo_report,
     run_weekly_paper_report,
 )
-
-
-def _err_json(command: str, error_code: int, error_message: str) -> str:
-    return json.dumps({
-        "ok": False,
-        "command": command,
-        "error_code": error_code,
-        "error_message": error_message,
-    }, ensure_ascii=False)
+from ai_trading_research_system.openclaw.contract import error_to_dict
 
 
 def main() -> int:
@@ -91,12 +83,16 @@ def main() -> int:
             )
             out = {**out, "command": "weekly_report"}
         else:
-            print(_err_json(args.task, 1, f"unknown task: {args.task}"), file=sys.stderr)
+            err = error_to_dict(args.task, 1, f"unknown task: {args.task}")
+            print(json.dumps(err, ensure_ascii=False), file=sys.stderr)
             return 1
+        # stdout: result JSON only
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return 0
     except Exception as e:
-        print(_err_json(args.task, 1, str(e)), file=sys.stderr)
+        # stderr: error JSON only
+        err = error_to_dict(args.task, 1, str(e))
+        print(json.dumps(err, ensure_ascii=False), file=sys.stderr)
         return 1
 
 

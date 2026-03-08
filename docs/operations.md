@@ -2,6 +2,8 @@
 
 面向新协作者：**能跑通什么、mock 与过渡、如何验证与降级**。
 
+**控制面**：CLI 与 OpenClaw 统一走 `application.commands`；OpenClaw 契约见 `openclaw/contract.py`（persona、skills、command contract）。control/ 为兼容层，退场中。
+
 ---
 
 ## 1. 能跑通什么

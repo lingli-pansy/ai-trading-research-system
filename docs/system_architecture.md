@@ -65,9 +65,12 @@ flowchart TB
 
 ## 入口与控制面（当前实现）
 
-- **CLI**：`presentation/cli.py` 仅做参数解析与打印；业务由 `application/commands` 执行。
-- **OpenClaw**：`openclaw/adapter`、`openclaw/commands` 将 skill 映射到 `application/commands`；persona/skills 见 `openclaw/persona.md`、`openclaw/skills.md`。
-- **UC-09**：`pipeline/weekly_paper_pipe` 为编排层（snapshot → research → strategy → allocation → execution）；benchmark/report/experience 由 `services/` 提供。
+**唯一业务入口**：OpenClaw / CLI → `application.commands`。
+
+- **CLI**：`presentation/cli.py` 仅做参数解析、调用 command、渲染输出（`presentation/renderers`）；业务由 `application/commands` 执行。
+- **OpenClaw**：`openclaw/adapter`、`openclaw/commands` 将 skill 映射到 `application/commands`；persona/skills 见 `openclaw/persona.md`、`openclaw/skills.md`；**契约**见 `openclaw/contract.py`（可测试的 command input/output schema）。
+- **control/**：**兼容层，退场中**。新逻辑不得再接入 control；请使用 `openclaw.adapter` / `openclaw.commands`。
+- **UC-09**：`pipeline/weekly_paper_pipe` 仅做编排（snapshot → research → strategy → allocation → execution）；benchmark/report/experience/summary 由 `services/` 提供。
 
 ---
 

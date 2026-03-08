@@ -24,6 +24,11 @@ flowchart LR
 
 ---
 
+## 控制面主线
+
+- **入口**：CLI（`presentation/cli.py`）或 OpenClaw（`scripts/run_for_openclaw.py` → `openclaw.adapter`）。
+- **业务**：全部由 `application.commands` 执行；control/ 为兼容层，不再作为主入口。
+
 ## 现状概览
 
 | 路径 | 当前实现 |

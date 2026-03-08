@@ -50,30 +50,29 @@ python cli.py paper [--symbol NVDA] [--once] [--mock] [--llm]
 - `research`：stdout 为 DecisionContract JSON；若 Skill 需要与 `run_for_openclaw.py` 相同的报告结构，可改用方式 B 或调用 `run_research_report()`。
 - `backtest` / `demo`：若需机器可读的 JSON，建议用方式 B；否则可直接解析 CLI 的 stdout 文本。
 
-**方式 B：Python API（control 层 / pipeline）**
+**方式 B：Python API（推荐 openclaw.adapter）**
 
-Skill 通过 HTTP 或本地调用本仓 Python API 时，可使用 control 层「意图路由 + 执行」或直接使用 pipeline 的 adapter：
-
-```python
-from ai_trading_research_system.control import route_intent, execute
-
-# 用户说 "analyse NVDA" 或 "run backtest AAPL"
-cmd = route_intent("analyse NVDA", use_mock=False, use_llm=False)
-result = execute(cmd, as_json=True)  # dict，与 run_for_openclaw 报告格式兼容
-# result 即 research/backtest/demo 的 JSON 报告，可回传 OpenClaw 或 Agent
-```
-
-或直接调用 pipeline adapter（与 `run_for_openclaw.py` 一致）：
+Skill 通过 HTTP 或本地调用本仓 Python API 时，**推荐直接使用 openclaw.adapter**（与 `run_for_openclaw.py` 一致，契约见 `openclaw/contract.py`）：
 
 ```python
-from ai_trading_research_system.pipeline.openclaw_adapter import (
+from ai_trading_research_system.openclaw.adapter import (
     run_research_report,
     run_backtest_report,
     run_demo_report,
+    run_weekly_paper_report,
 )
 report = run_research_report("NVDA", use_mock=False, use_llm=False)
 report = run_backtest_report("NVDA", start_date="2024-01-01", end_date="2024-06-01")
 report = run_demo_report("NVDA", use_mock=False, use_llm=False)  # 含 research/strategy/backtest/summary 四块
+```
+
+*兼容层（退场中）*：仍可使用 `control.route_intent` + `control.execute`，新代码请用上述 adapter。
+
+```python
+# 已废弃为新入口，仅兼容保留
+from ai_trading_research_system.control import route_intent, execute
+cmd = route_intent("analyse NVDA", use_mock=False, use_llm=False)
+result = execute(cmd, as_json=True)  # dict，与 run_for_openclaw 报告格式兼容
 ```
 
 入参（symbol、task、--mock/--llm 等）与出参（上述报告格式）与本文档「报告格式」及 `run_for_openclaw.py` 的 stdout JSON 一致。

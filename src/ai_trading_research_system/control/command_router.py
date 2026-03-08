@@ -1,6 +1,8 @@
 """
-Command router: map user intent (natural language / command) to internal subcommand + args.
-Aligned with cli.py subcommands so that OpenClaw Agent / Skill can use the same surface.
+COMPATIBILITY LAYER — Do not use for new code.
+
+Command router: map user intent to internal subcommand + args.
+Canonical control surface: openclaw.adapter + application.commands.
 """
 from __future__ import annotations
 

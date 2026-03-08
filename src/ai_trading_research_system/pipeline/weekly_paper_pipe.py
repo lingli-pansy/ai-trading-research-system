@@ -20,7 +20,10 @@ from ai_trading_research_system.research.orchestrator import ResearchOrchestrato
 from ai_trading_research_system.strategy.translator import ContractTranslator
 from ai_trading_research_system.execution.nautilus_paper_runner import NautilusPaperRunner
 from ai_trading_research_system.services.benchmark_service import get_benchmark_return, compare_to_benchmark
-from ai_trading_research_system.services.report_service import generate_and_write as report_generate_and_write
+from ai_trading_research_system.services.report_service import (
+    generate_and_write as report_generate_and_write,
+    build_weekly_result_summary,
+)
 from ai_trading_research_system.services.experience_service import write_weekly_run
 
 
@@ -151,19 +154,18 @@ def run_weekly_autonomous_paper(
         report_dir=report_dir,
     )
     market_data_source = "mock" if use_mock else "yfinance"
-    summary = {
-        "portfolio_return": portfolio_return,
-        "benchmark_return": benchmark_return,
-        "excess_return": bench_result.excess_return,
-        "trade_count": total_trades,
-        "pnl": total_pnl,
-        "report_path": report_path,
-        "daily_research_count": len(daily_research),
-        "analysis_in_report": True,
-        "snapshot_source": snapshot.source,
-        "market_data_source": market_data_source,
-        "benchmark_source": benchmark_source,
-    }
+    summary = build_weekly_result_summary(
+        portfolio_return=portfolio_return,
+        benchmark_return=benchmark_return,
+        excess_return=bench_result.excess_return,
+        total_trades=total_trades,
+        total_pnl=total_pnl,
+        report_path=report_path,
+        daily_research_count=len(daily_research),
+        snapshot_source=snapshot.source,
+        market_data_source=market_data_source,
+        benchmark_source=benchmark_source,
+    )
     return WeeklyPaperResult(
         ok=True,
         mandate_id=mandate.mandate_id,

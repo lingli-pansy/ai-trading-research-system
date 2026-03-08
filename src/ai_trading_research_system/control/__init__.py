@@ -1,6 +1,9 @@
 """
-Control layer: command routing and Skill/OpenClaw interface.
-Unified entry for user intent (e.g. analyse NVDA, run backtest) and for OpenClaw Skill to invoke CLI or API.
+COMPATIBILITY LAYER — Do not use for new code.
+
+Control layer: legacy command routing and Skill interface.
+New control surface: OpenClaw / CLI → application.commands only.
+Use openclaw.adapter / openclaw.commands for OpenClaw; use presentation.cli for CLI.
 """
 from __future__ import annotations
 
