@@ -32,6 +32,13 @@ def render(command: str, result: Any, args: Any) -> RenderOutput:
             "report_path": result.report_path,
             "summary": result.summary,
         }
+    if command == "weekly_report":
+        return {
+            "ok": result.ok,
+            "report_path": getattr(result, "report_path", ""),
+            "mandate_id": getattr(result, "mandate_id", ""),
+            "summary": getattr(result, "summary", {}),
+        }
     return []
 
 

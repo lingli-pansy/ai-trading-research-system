@@ -69,8 +69,9 @@ def test_weekly_autonomous_paper_input_schema():
 
 
 def test_weekly_report_input_schema():
-    inp = WeeklyReportInput(capital=10000, benchmark="SPY", duration=5)
+    inp = WeeklyReportInput(report_dir=None)
     assert inp.command == "weekly_report"
+    assert inp.report_dir is None
 
 
 def test_research_symbol_output_schema():
@@ -165,10 +166,12 @@ def test_weekly_report_output_schema():
         used_nautilus=True,
         mandate_id="m1",
         report_path="/reports/weekly_report_m1.json",
+        summary={"period": "day_0_to_1"},
     )
     d = out.model_dump()
     assert d["ok"] is True
     assert d["command"] == "weekly_report"
+    assert "summary" in d
 
 
 def test_error_schema():

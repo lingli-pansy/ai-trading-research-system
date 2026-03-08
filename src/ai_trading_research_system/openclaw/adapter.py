@@ -22,14 +22,14 @@ def _json_safe_contract_dump(contract: Any) -> dict[str, Any]:
 def format_result(task: str, result: Any, *, command_override: str | None = None, **kwargs: Any) -> dict[str, Any]:
     """
     Format raw command result to OpenClaw report dict (JSON-serializable).
-    task: research | backtest | demo | weekly_autonomous_paper | weekly_report
+    task: canonical command (research_symbol | backtest_symbol | run_demo | weekly_autonomous_paper | weekly_report).
     """
-    if task == "research":
+    if task == "research_symbol":
         contract = result
         dump = _json_safe_contract_dump(contract)
         symbol = kwargs.get("symbol", getattr(contract, "symbol", ""))
         return {
-            "task": "research",
+            "task": "research_symbol",
             "symbol": symbol,
             "completed_at": datetime.utcnow().isoformat() + "Z",
             "contract_action": contract.suggested_action,
@@ -40,13 +40,13 @@ def format_result(task: str, result: Any, *, command_override: str | None = None
             "status": "ok",
             "reason": "",
         }
-    if task == "backtest":
+    if task == "backtest_symbol":
         dump = _json_safe_contract_dump(result.contract)
         symbol = kwargs.get("symbol", "")
         status = "no_trade" if result.metrics.trade_count == 0 else "ok"
         reason = "wait_confirmation" if result.metrics.trade_count == 0 else ""
         return {
-            "task": "backtest",
+            "task": "backtest_symbol",
             "symbol": symbol,
             "completed_at": datetime.utcnow().isoformat() + "Z",
             "contract_action": result.contract.suggested_action,
@@ -64,7 +64,7 @@ def format_result(task: str, result: Any, *, command_override: str | None = None
             "status": status,
             "reason": reason,
         }
-    if task == "demo":
+    if task == "run_demo":
         contract = result.contract
         dump = _json_safe_contract_dump(contract)
         symbol = kwargs.get("symbol", "")
@@ -73,7 +73,7 @@ def format_result(task: str, result: Any, *, command_override: str | None = None
         from ai_trading_research_system.strategy.translator import ContractTranslator
         signal = ContractTranslator().translate(contract)
         return {
-            "task": "demo",
+            "task": "run_demo",
             "symbol": symbol,
             "completed_at": datetime.utcnow().isoformat() + "Z",
             "engine_type": "nautilus",
@@ -105,7 +105,19 @@ def format_result(task: str, result: Any, *, command_override: str | None = None
                 "sentence": f"结论: {contract.suggested_action}（置信度 {contract.confidence}），策略信号 {signal.action}，回测 {result.metrics.trade_count} 笔，pnl={result.metrics.pnl:.2f}。",
             },
         }
-    if task in ("weekly_autonomous_paper", "weekly_report"):
+    if task == "weekly_report":
+        # WeeklyReportCommandResult: ok, report_path, mandate_id, summary (no execution)
+        return {
+            "ok": result.ok,
+            "command": command_override or "weekly_report",
+            "mandate_id": getattr(result, "mandate_id", "") or "",
+            "report_path": getattr(result, "report_path", "") or "",
+            "summary": getattr(result, "summary", {}) or {},
+            "status": "ok",
+            "engine_type": "nautilus",
+            "used_nautilus": True,
+        }
+    if task == "weekly_autonomous_paper":
         summary = result.summary or {}
         out = {
             "ok": result.ok,
@@ -129,8 +141,8 @@ def run_research_report(
     use_llm: bool = False,
 ) -> dict[str, Any]:
     """Run research via command_registry; return report dict."""
-    result = registry_run("research", symbol=symbol, use_mock=use_mock, use_llm=use_llm)
-    return format_result("research", result, symbol=symbol)
+    result = registry_run("research_symbol", symbol=symbol, use_mock=use_mock, use_llm=use_llm)
+    return format_result("research_symbol", result, symbol=symbol)
 
 
 def run_backtest_report(
@@ -143,14 +155,14 @@ def run_backtest_report(
 ) -> dict[str, Any]:
     """Run backtest via command_registry; return report dict."""
     result = registry_run(
-        "backtest",
+        "backtest_symbol",
         symbol=symbol,
         start_date=start_date,
         end_date=end_date,
         use_mock=use_mock,
         use_llm=use_llm,
     )
-    return format_result("backtest", result, symbol=symbol)
+    return format_result("backtest_symbol", result, symbol=symbol)
 
 
 def run_demo_report(
@@ -160,8 +172,8 @@ def run_demo_report(
     use_llm: bool = False,
 ) -> dict[str, Any]:
     """Run demo via command_registry; return report dict."""
-    result = registry_run("demo", symbol=symbol, use_mock=use_mock, use_llm=use_llm)
-    return format_result("demo", result, symbol=symbol)
+    result = registry_run("run_demo", symbol=symbol, use_mock=use_mock, use_llm=use_llm)
+    return format_result("run_demo", result, symbol=symbol)
 
 
 def run_weekly_paper_report(
@@ -189,3 +201,12 @@ def run_weekly_paper_report(
         report_dir=report_dir,
     )
     return format_result("weekly_autonomous_paper", result)
+
+
+def run_weekly_report_report(
+    *,
+    report_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Read latest weekly report via command_registry; return report dict (no execution)."""
+    result = registry_run("weekly_report", report_dir=report_dir or Path.cwd() / "reports")
+    return format_result("weekly_report", result)

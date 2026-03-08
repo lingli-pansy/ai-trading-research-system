@@ -8,7 +8,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
 
 from ai_trading_research_system.application.command_registry import run as command_run
 from ai_trading_research_system.openclaw.adapter import format_result
@@ -34,15 +33,9 @@ def main() -> int:
 
     try:
         kwargs = kwargs_for_task(args.task, args)
-        report_dir = Path.cwd() / "reports"
-        if args.task in ("weekly_autonomous_paper", "weekly_report"):
-            report_dir.mkdir(parents=True, exist_ok=True)
-        else:
-            report_dir = None
-        result = command_run(args.task, report_dir=report_dir, **kwargs)
-        command_override = "weekly_report" if args.task == "weekly_report" else None
-        out = format_result(args.task, result, command_override=command_override, **kwargs)
-        if args.task in ("research", "backtest", "demo"):
+        result = command_run(args.task, **kwargs)
+        out = format_result(args.task, result, **kwargs)
+        if args.task in ("research_symbol", "backtest_symbol", "run_demo"):
             out["ok"] = True
             out["command"] = args.task
         print(json.dumps(out, ensure_ascii=False, indent=2))

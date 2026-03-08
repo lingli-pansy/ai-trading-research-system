@@ -52,10 +52,7 @@ class WeeklyAutonomousPaperInput(CommandInputBase):
 
 class WeeklyReportInput(CommandInputBase):
     command: str = "weekly_report"
-    capital: float = 10_000.0
-    benchmark: str = "SPY"
-    duration: int = 5
-    auto_confirm: bool = True
+    report_dir: str | None = None
 
 
 # --- Output schemas: success ---
@@ -114,6 +111,7 @@ class WeeklyReportOutput(OpenClawSuccessBase):
     command: str = "weekly_report"
     mandate_id: str = ""
     report_path: str | None = None
+    summary: dict[str, Any] = Field(default_factory=dict)
 
 
 # --- Error schema (stderr / failure) ---

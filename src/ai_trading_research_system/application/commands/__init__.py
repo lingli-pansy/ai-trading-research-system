@@ -4,6 +4,7 @@ from ai_trading_research_system.application.commands.backtest_symbol import run_
 from ai_trading_research_system.application.commands.run_demo import run_demo
 from ai_trading_research_system.application.commands.run_paper import run_paper
 from ai_trading_research_system.application.commands.run_weekly_autonomous_paper import run_weekly_autonomous_paper
+from ai_trading_research_system.application.commands.run_weekly_report import run_weekly_report
 from ai_trading_research_system.application.commands.generate_weekly_report import generate_weekly_report
 
 __all__ = [
@@ -12,5 +13,6 @@ __all__ = [
     "run_demo",
     "run_paper",
     "run_weekly_autonomous_paper",
+    "run_weekly_report",
     "generate_weekly_report",
 ]

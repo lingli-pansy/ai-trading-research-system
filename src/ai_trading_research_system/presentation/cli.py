@@ -1,5 +1,6 @@
 """
 Unified CLI: parse args -> command_registry.run -> renderer. No business logic, no pipeline calls.
+report_dir / project_root come from command_registry.kwargs_from_cli_args only.
 """
 from __future__ import annotations
 
@@ -20,17 +21,8 @@ from ai_trading_research_system.application.command_registry import (
 )
 from ai_trading_research_system.presentation.renderers import render
 
-
-def _project_root() -> Path:
-    p = Path(__file__).resolve()
-    for _ in range(4):
-        p = p.parent
-    return p
-
-
-PROJECT_ROOT = _project_root()
 if load_dotenv:
-    load_dotenv(PROJECT_ROOT / ".env")
+    load_dotenv(Path.cwd() / ".env")
 
 
 def _json_serial(obj: object) -> str | float | int | None:
@@ -41,7 +33,7 @@ def _json_serial(obj: object) -> str | float | int | None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="AI Trading Research System — unified CLI (research / backtest / paper / demo / weekly-paper)"
+        description="AI Trading Research System — unified CLI (research / backtest / paper / demo / weekly-paper / weekly_report)"
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -76,14 +68,13 @@ def main() -> int:
     p_weekly.add_argument("--no-auto-confirm", action="store_false", dest="auto_confirm", help="Disable auto confirm")
     _add_common(p_weekly)
 
+    p_weekly_report = subparsers.add_parser("weekly_report", help="Read latest weekly report or show summary (no execution)")
+    _add_common(p_weekly_report)
+
     args = parser.parse_args()
 
     kwargs = kwargs_from_cli_args(args.command, args)
-    report_dir = PROJECT_ROOT / "reports" if args.command == "weekly-paper" else None
-    if report_dir is not None:
-        report_dir.mkdir(parents=True, exist_ok=True)
-    project_root = PROJECT_ROOT if args.command == "paper" else None
-    result = command_run(args.command, report_dir=report_dir, project_root=project_root, **kwargs)
+    result = command_run(args.command, **kwargs)
 
     output = render(args.command, result, args)
     if isinstance(output, dict):
@@ -92,9 +83,9 @@ def main() -> int:
         for line in output:
             print(line)
 
-    if args.command == "paper" and getattr(result, "paused", False):
+    if getattr(result, "paused", False):
         return 1
-    if args.command == "weekly-paper" and not getattr(result, "ok", True):
+    if getattr(result, "ok", True) is False:
         return 1
     return 0
 

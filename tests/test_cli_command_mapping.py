@@ -11,6 +11,7 @@ from ai_trading_research_system.application.commands import (
     run_demo,
     run_paper,
     run_weekly_autonomous_paper,
+    run_weekly_report,
 )
 
 
@@ -37,6 +38,11 @@ def test_paper_command_exists():
 def test_weekly_autonomous_paper_command_exists():
     """CLI weekly-paper -> run_weekly_autonomous_paper."""
     assert callable(run_weekly_autonomous_paper)
+
+
+def test_weekly_report_command_exists():
+    """CLI weekly_report -> run_weekly_report (report-only, no execution)."""
+    assert callable(run_weekly_report)
 
 
 def test_research_returns_contract():
