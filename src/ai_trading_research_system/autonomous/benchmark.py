@@ -51,11 +51,13 @@ def get_benchmark_series(
     start_date: str | None = None,
     end_date: str | None = None,
     lookback_days: int = 5,
+    *,
+    reject_mock: bool = False,
 ) -> tuple[list[float], float, float, float]:
     """
     获取 benchmark 日收益率序列及衍生指标。数据来自 MarketDataService（IB），带缓存。
     返回 (daily_returns, total_return, volatility_annualized, max_drawdown)。
-    取数失败时返回 ([], 0.0, 0.0, 0.0)。
+    取数失败时返回 ([], 0.0, 0.0, 0.0)。reject_mock=True 时取数失败则 raise，不静默返回空。
     """
     t0 = time.perf_counter()
     mds = get_market_data_service(for_research=False)
@@ -67,6 +69,12 @@ def get_benchmark_series(
         use_cache=True,
     )
     logger.info("[ib] benchmark latency=%.2fs", time.perf_counter() - t0)
+    if reject_mock and (not out[0] or len(out[0]) == 0):
+        raise RuntimeError(
+            "Reject mock: benchmark series from IB required. "
+            "Check IB Gateway and historical data for %s; or run with use_mock for local testing."
+            % symbol
+        )
     return out
 
 

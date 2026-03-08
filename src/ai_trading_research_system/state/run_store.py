@@ -363,29 +363,33 @@ class RunStore:
         return self._run_dir(run_id)
 
     # ---------- State-aware: get_latest_portfolio_state ----------
-    def get_latest_portfolio_state(self) -> dict[str, Any] | None:
+    def get_latest_portfolio_state(self, use_mock: bool = True) -> dict[str, Any] | None:
         """
         优先：runs/<latest_run>/snapshots/portfolio_after.json；
-        否则 fallback：account snapshot API。
+        否则：account snapshot API。
+        use_mock=True：无本地状态时用 mock snapshot（静默 fallback）。
+        use_mock=False：无本地状态时调 get_account_snapshot(mock=False, allow_fallback=False)，失败则抛出，不静默降级。
         """
         rid = self.read_latest_run_id()
         if rid:
             after = self.read_snapshot(rid, "portfolio_after")
             if after:
                 return after
-        try:
-            from ai_trading_research_system.autonomous import get_account_snapshot
-            snap = get_account_snapshot(paper=True, mock=True, initial_cash=10_000.0, allow_fallback=True)
-            return {
-                "cash": snap.cash,
-                "equity": snap.equity,
-                "positions": list(snap.positions or []),
-                "source": snap.source,
-                "timestamp": snap.timestamp,
-                "risk_budget": getattr(snap, "risk_budget", 0),
-            }
-        except Exception:
-            return None
+        from ai_trading_research_system.autonomous import get_account_snapshot
+        snap = get_account_snapshot(
+            paper=True,
+            mock=use_mock,
+            initial_cash=10_000.0,
+            allow_fallback=use_mock,
+        )
+        return {
+            "cash": snap.cash,
+            "equity": snap.equity,
+            "positions": list(snap.positions or []),
+            "source": snap.source,
+            "timestamp": snap.timestamp,
+            "risk_budget": getattr(snap, "risk_budget", 0),
+        }
 
     # ---------- State-aware: get_previous_research_snapshot(symbol) ----------
     def get_previous_research_snapshot(self, symbol: str) -> dict[str, Any] | None:

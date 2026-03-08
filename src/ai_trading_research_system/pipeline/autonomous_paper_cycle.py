@@ -186,14 +186,19 @@ def evaluate_trigger_and_allocate(
     capital: float,
     benchmark: str,
     store: RunStore,
+    *,
+    reject_mock: bool = False,
 ) -> tuple[Any, Any, AllocationResult | None]:
     """
     输出: trigger, trigger_trace, allocator_result (或 None 表示 no_trigger/no_trade).
     写入: audit (trigger)
+    reject_mock=True 时 benchmark 取数失败则 raise，不静默用空数据。
     """
     contract_by_symbol = {s: (ctx, c) for s, ctx, c in contracts_for_cycle}
     opportunity_ranking_list = [{"symbol": o.symbol, "score": o.score, "confidence": o.confidence, "risk": o.risk} for o in ranked]
-    spy_returns, bench_ret, vol_d, max_dd = get_benchmark_returns_and_volatility(symbol=benchmark, lookback_days=5)
+    spy_returns, bench_ret, vol_d, max_dd = get_benchmark_returns_and_volatility(
+        symbol=benchmark, lookback_days=5, reject_mock=reject_mock
+    )
     benchmark_data = {
         "benchmark_return": bench_ret,
         "volatility": vol_d,
@@ -501,6 +506,7 @@ def run_autonomous_paper_cycle(
         trigger, trigger_trace, alloc_result = evaluate_trigger_and_allocate(
             run_id, snap, mandate, contracts_for_cycle, ranked,
             input_.capital, input_.benchmark, store,
+            reject_mock=not input_.use_mock,
         )
         if trigger is None:
             store.write_artifact(run_id, "final_decision", {"no_trade_reason": "no_trigger", "order_intents": []})

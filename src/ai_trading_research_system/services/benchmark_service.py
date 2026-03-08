@@ -33,9 +33,15 @@ def get_benchmark_return(
 def get_benchmark_returns_and_volatility(
     symbol: str = "SPY",
     lookback_days: int = 5,
+    *,
+    reject_mock: bool = False,
 ) -> tuple[list[float], float, float, float]:
-    """Return (daily_returns, total_return, volatility_annualized, max_drawdown)."""
-    return get_benchmark_series(symbol=symbol, lookback_days=lookback_days)
+    """Return (daily_returns, total_return, volatility_annualized, max_drawdown). reject_mock=True 时取数失败则 raise。"""
+    return get_benchmark_series(
+        symbol=symbol,
+        lookback_days=lookback_days,
+        reject_mock=reject_mock,
+    )
 
 
 def compare_to_benchmark(

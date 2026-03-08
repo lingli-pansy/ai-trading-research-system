@@ -94,7 +94,7 @@ class AutonomousTradingAgent:
         )
 
         store = self._store_ref()
-        portfolio_state = store.get_latest_portfolio_state()
+        portfolio_state = store.get_latest_portfolio_state(use_mock=self.use_mock)
         last_meta = store.get_last_run()
         symbols = self.symbols
         if last_meta and last_meta.get("symbols"):

@@ -66,18 +66,25 @@ def test_fallback_to_yfinance_when_allowed():
 
 
 def test_benchmark_series_uses_cache():
-    """get_benchmark_series 使用缓存，相同 (symbol, lookback_days) 在 TTL 内应命中。"""
-    # 清空缓存以便观察
-    _BENCHMARK_CACHE.clear()
-    mds = get_market_data_service(for_research=False)
-    key = ("SPY", 5)
-    returns1, tr1, vol1, dd1 = mds.get_benchmark_series("SPY", lookback_days=5, use_cache=True)
-    assert key in _BENCHMARK_CACHE
-    ts_first, _ = _BENCHMARK_CACHE[key]
-    returns2, tr2, vol2, dd2 = mds.get_benchmark_series("SPY", lookback_days=5, use_cache=True)
-    ts_second, _ = _BENCHMARK_CACHE[key]
-    assert ts_first == ts_second
-    assert returns1 == returns2 and tr1 == tr2 and vol1 == vol2 and dd1 == dd2
+    """get_benchmark_series 使用缓存，相同 (symbol, lookback_days) 在 TTL 内应命中。不依赖 IB 连接。"""
+    orig_host = os.environ.pop("IBKR_HOST", None)
+    orig_port = os.environ.pop("IBKR_PORT", None)
+    try:
+        _BENCHMARK_CACHE.clear()
+        mds = get_market_data_service(for_research=False)
+        key = ("SPY", 5)
+        returns1, tr1, vol1, dd1 = mds.get_benchmark_series("SPY", lookback_days=5, use_cache=True)
+        assert key in _BENCHMARK_CACHE
+        ts_first, _ = _BENCHMARK_CACHE[key]
+        returns2, tr2, vol2, dd2 = mds.get_benchmark_series("SPY", lookback_days=5, use_cache=True)
+        ts_second, _ = _BENCHMARK_CACHE[key]
+        assert ts_first == ts_second
+        assert returns1 == returns2 and tr1 == tr2 and vol1 == vol2 and dd1 == dd2
+    finally:
+        if orig_host is not None:
+            os.environ["IBKR_HOST"] = orig_host
+        if orig_port is not None:
+            os.environ["IBKR_PORT"] = orig_port
 
 
 @pytest.mark.skipif(not _ib_configured(), reason="IBKR_HOST/PORT not set")

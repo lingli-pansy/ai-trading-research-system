@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 from ai_trading_research_system.execution.ibkr_client import (
     IBKRAccountSnapshotRaw,
     _connect_timeout,
+    _disconnect_delay,
     _host_port_client_id,
     _positions_timeout,
     _warmup_delay,
@@ -99,11 +100,12 @@ class IBKRSession:
         self._position_cache = PositionCache()
 
     def connect(self) -> bool:
-        """同步连接；成功返回 True。冷启动：connect 后 sleep 1–2s 再允许请求。"""
+        """同步连接；成功返回 True。失败时重试一次（间隔 3s），冷启动：connect 后 sleep 1–2s 再允许请求。"""
         h, p, cid = _host_port_client_id(None, None, self._client_id)
         timeout = _connect_timeout()
         result: list[bool] = []
         loop_running = threading.Event()
+        connect_retry_delay = 3.0  # 首次失败后等待再重试，避免 Gateway 未就绪
 
         def run_in_thread():
             self._loop = asyncio.new_event_loop()
@@ -112,13 +114,26 @@ class IBKRSession:
             async def do_connect():
                 from ib_insync import IB
                 t0 = time.perf_counter()
-                self._ib = IB()
-                await self._ib.connectAsync(h, p, clientId=cid, timeout=timeout)
-                warmup = _warmup_delay()
-                if warmup > 0:
-                    await asyncio.sleep(warmup)
-                logger.info("[ib] IB connection latency=%.2fs", time.perf_counter() - t0)
-                return True
+                last_err: Exception | None = None
+                for attempt in range(2):
+                    self._ib = IB()
+                    try:
+                        await self._ib.connectAsync(h, p, clientId=cid, timeout=timeout)
+                        warmup = _warmup_delay()
+                        if warmup > 0:
+                            await asyncio.sleep(warmup)
+                        logger.info("[ib] IB connection latency=%.2fs (attempt=%s)", time.perf_counter() - t0, attempt + 1)
+                        return True
+                    except Exception as e:
+                        last_err = e
+                        logger.warning("[ib] connect attempt %s failed: %s", attempt + 1, e)
+                        if self._ib and getattr(self._ib, "client", None) and self._ib.client.isConnected():
+                            self._ib.disconnect()
+                        if attempt == 0:
+                            await asyncio.sleep(connect_retry_delay)
+                if last_err is not None:
+                    raise last_err
+                return False
 
             try:
                 ok = self._loop.run_until_complete(do_connect())
@@ -126,7 +141,8 @@ class IBKRSession:
                 if ok:
                     loop_running.set()  # 先通知「即将 run_forever」，再进入，避免主线程在 loop 未跑时就调 snapshot
                     self._loop.run_forever()
-            except Exception:
+            except Exception as e:
+                logger.warning("[ib] IBKRSession connect failed: %s", e)
                 result.append(False)
 
         self._thread = threading.Thread(target=run_in_thread, daemon=True)
@@ -140,7 +156,7 @@ class IBKRSession:
         return False
 
     def disconnect(self) -> None:
-        """同步断开并结束后台 loop。"""
+        """同步断开并结束后台 loop；断开后等待 IBKR_DISCONNECT_DELAY 便于 Gateway 释放 client id。"""
         if self._loop is None or self._ib is None:
             return
         fut: asyncio.Future[None] = asyncio.run_coroutine_threadsafe(
@@ -153,6 +169,9 @@ class IBKRSession:
         self._ib = None
         self._loop = None
         self._thread = None
+        delay = _disconnect_delay()
+        if delay > 0:
+            time.sleep(delay)
 
     async def _disconnect_async(self) -> None:
         if self._ib and getattr(self._ib, "client", None) and self._ib.client.isConnected():

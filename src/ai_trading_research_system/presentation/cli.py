@@ -120,6 +120,7 @@ def main() -> int:
     p_proposal_run.add_argument("--symbols", default="NVDA", help="Comma-separated symbols (default: NVDA)")
     p_proposal_run.add_argument("--capital", type=float, default=10000, help="Capital (default 10000)")
     p_proposal_run.add_argument("--benchmark", default="SPY", help="Benchmark (default SPY)")
+    p_proposal_run.add_argument("--no-mock", action="store_true", help="Use real paper data (IBKR snapshot, yfinance research); fail if unavailable")
     _add_common(p_proposal_run)
 
     args = parser.parse_args()
@@ -174,10 +175,11 @@ def main() -> int:
         from ai_trading_research_system.state.run_store import get_run_store
         symbols = [s.strip() for s in (args.symbols or "NVDA").split(",") if s.strip()]
         run_id = f"run_{int(time.time())}"
+        use_mock = not getattr(args, "no_mock", False)
         out = run_autonomous_paper_cycle(
             run_id=run_id,
             symbol_universe=symbols,
-            use_mock=not getattr(args, "llm", False),
+            use_mock=use_mock,
             use_llm=getattr(args, "llm", False),
             capital=getattr(args, "capital", 10000),
             benchmark=getattr(args, "benchmark", "SPY"),
