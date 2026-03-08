@@ -38,12 +38,13 @@ def _risk_level(contract: DecisionContract) -> str:
 
 
 def _thesis_strength(contract: DecisionContract) -> float:
+    """Thesis 长度与内容密度，用于拉开同 confidence/risk 下的分数差。"""
     t = (contract.thesis or "").strip()
-    return min(1.0, len(t) / 200.0)
+    return min(1.0, len(t) / 150.0)  # 稍敏感于长度，便于区分
 
 
 def _score_raw(contract: DecisionContract) -> float:
-    """Raw score (confidence + thesis strength - risk penalty), ~1 to 3."""
+    """Raw score (confidence + thesis weight - risk penalty), ~1 to 3."""
     conf = _confidence_numeric(contract.confidence)
     strength = _thesis_strength(contract)
     risk_penalty = 0.0
@@ -51,13 +52,13 @@ def _score_raw(contract: DecisionContract) -> float:
         risk_penalty = 0.3
     elif _risk_level(contract) == "high":
         risk_penalty = 0.6
-    return conf + strength - risk_penalty
+    return conf + 1.2 * strength - risk_penalty  # thesis 权重略增，提升区分度
 
 
 def _score(contract: DecisionContract) -> float:
-    """Normalized opportunity score in [0.0, 1.0] for trace and probe threshold."""
+    """Normalized opportunity score in [0.0, 1.0] for trace and probe threshold. 归一化略拉大间距避免多标的同分。"""
     raw = _score_raw(contract)
-    return round(max(0.0, min(1.0, (raw - 0.5) / 2.5)), 4)
+    return round(max(0.0, min(1.0, (raw - 0.5) / 2.0)), 4)  # 分母 2.0 使典型 raw 1.5–2.5 映射到约 0.5–1.0
 
 
 class OpportunityRanking:

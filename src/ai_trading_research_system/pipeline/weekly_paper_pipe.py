@@ -295,6 +295,7 @@ def run_weekly_autonomous_paper(
                 trigger_context=trigger_trace.to_dict() if hasattr(trigger_trace, "to_dict") else {},
             )
             decision_traces_week.extend(getattr(alloc_result, "decision_traces", []) or [])
+            _reason = alloc_result.no_trade_reason or "no_trade"
             if wait_any and alloc_result.no_trade:
                 _ts = datetime.now(timezone.utc).isoformat()
                 for o in ranked:
@@ -308,6 +309,29 @@ def run_weekly_autonomous_paper(
                             list(getattr(contract, "key_drivers", []) or [])[:10],
                             list(getattr(contract, "risk_flags", []) or []),
                             "no_trade",
+                            no_trade_reason=_reason if _reason else "wait_confirmation",
+                        ).to_dict(),
+                    )
+            elif alloc_result.no_trade and ranked:
+                # allocator 返回 no_trade 但非 wait（如 no_valid_signals），且可能未产出 symbol traces，补全
+                existing_symbols = {t.get("symbol") for t in decision_traces_week if t.get("trace_type") == "symbol" or t.get("symbol")}
+                _ts = datetime.now(timezone.utc).isoformat()
+                for o in ranked:
+                    if o.symbol in existing_symbols:
+                        continue
+                    _, contract = contract_by_symbol.get(o.symbol, (None, None))
+                    if contract is None:
+                        continue
+                    decision_traces_week.append(
+                        SymbolDecisionTrace(
+                            _ts,
+                            o.symbol,
+                            getattr(contract, "thesis", "") or "",
+                            o.score,
+                            list(getattr(contract, "key_drivers", []) or [])[:10],
+                            list(getattr(contract, "risk_flags", []) or []),
+                            "no_trade",
+                            no_trade_reason=_reason,
                         ).to_dict(),
                     )
             replacement_decisions_week.extend(alloc_result.replacement_decisions)

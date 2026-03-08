@@ -135,8 +135,13 @@ def finish_week(
         portfolio_traces = [t for t in decision_traces if not t.get("symbol")]
         symbol_traces = [t for t in decision_traces if t.get("symbol")]
     traces_replace = [t for t in symbol_traces if t.get("final_action") == "replace"]
+    # 无交易时在 summary 中明确写出原因，便于读懂「为什么没买」
+    no_trade_explain = ""
+    if no_trade_reasons:
+        no_trade_explain = "未交易原因：" + "、".join(no_trade_reasons[:5]) + "。"
+    summary_line = why_replacements or (no_trade_explain + "本周无调仓或调仓因政策/健康约束未执行。")
     decision_traces_summary = {
-        "summary": why_replacements or "本周无调仓或调仓因政策/健康约束未执行。",
+        "summary": summary_line,
         "why_major_reallocations": "主要调仓源于机会分数差超过策略阈值、且未超过 turnover 与替换次数上限；详见 portfolio_traces / symbol_traces 与 trigger_traces。" if traces_replace else "无替换类决策。",
         "portfolio_traces": portfolio_traces,
         "symbol_traces": symbol_traces,
@@ -170,6 +175,18 @@ def finish_week(
                 "research_key_drivers": t.get("research_key_drivers", []) or [],
                 "research_risk_factors": t.get("research_risk_factors", []) or [],
             })
+    # 从 daily_research 补全 research reasoning，避免 symbol_traces 为空时周报无 thesis
+    for d in (daily_research or []):
+        sym = d.get("symbol", "")
+        if not sym or sym in seen_sym:
+            continue
+        seen_sym.add(sym)
+        research_per_symbol.append({
+            "symbol": sym,
+            "research_thesis": d.get("thesis", ""),
+            "research_key_drivers": list(d.get("key_drivers") or [])[:10],
+            "research_risk_factors": [],
+        })
     research_reasoning_summary = {
         "per_symbol": research_per_symbol,
         "summary": f"本周决策依据 {len(research_per_symbol)} 个标的的 research reasoning。" if research_per_symbol else "本周无 research reasoning 记录。",

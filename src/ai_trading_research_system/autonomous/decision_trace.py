@@ -31,17 +31,18 @@ class PortfolioDecisionTrace:
 
 @dataclass
 class SymbolDecisionTrace:
-    """标的级决策记录：symbol、研究结论、opportunity_score、key_drivers、risk_factors、final_action。"""
+    """标的级决策记录：symbol、研究结论、opportunity_score、key_drivers、risk_factors、final_action；no_trade 时可选 no_trade_reason。"""
     timestamp: str
     symbol: str
     research_thesis: str
     opportunity_score: float
     key_drivers: list[str]
     risk_factors: list[str]
-    final_action: str  # replace | rejected | retain | no_trade
+    final_action: str  # replace | rejected | retain | no_trade | entry
+    no_trade_reason: str = ""  # 当 final_action=no_trade 时：wait_confirmation | score_too_low | health_constraint | probe_threshold_not_met | no_valid_signals 等
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "trace_type": "symbol",
             "timestamp": self.timestamp,
             "symbol": self.symbol,
@@ -51,6 +52,9 @@ class SymbolDecisionTrace:
             "risk_factors": self.risk_factors,
             "final_action": self.final_action,
         }
+        if self.no_trade_reason:
+            out["no_trade_reason"] = self.no_trade_reason
+        return out
 
 
 @dataclass

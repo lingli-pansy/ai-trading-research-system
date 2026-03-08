@@ -3,11 +3,40 @@ Decision Traceability: DecisionTrace、allocator 生成 trace、trigger 记录 t
 """
 from __future__ import annotations
 
-from ai_trading_research_system.autonomous.decision_trace import DecisionTrace, TriggerTrace
+from ai_trading_research_system.autonomous.decision_trace import DecisionTrace, TriggerTrace, SymbolDecisionTrace
 from ai_trading_research_system.autonomous.allocator import PortfolioAllocator
 from ai_trading_research_system.autonomous.schemas import AccountSnapshot, WeeklyTradingMandate
 from ai_trading_research_system.autonomous.portfolio_policy import PortfolioDecisionPolicy, default_policy
 from ai_trading_research_system.autonomous.trigger_evaluator import evaluate_intraday_triggers
+
+
+def test_symbol_decision_trace_no_trade_reason():
+    """UC-10: SymbolDecisionTrace 在 final_action=no_trade 时可含 no_trade_reason，且 to_dict 输出该字段。"""
+    t = SymbolDecisionTrace(
+        timestamp="2024-01-01T12:00:00",
+        symbol="SPY",
+        research_thesis="test thesis",
+        opportunity_score=0.4,
+        key_drivers=[],
+        risk_factors=[],
+        final_action="no_trade",
+        no_trade_reason="wait_confirmation",
+    )
+    d = t.to_dict()
+    assert d.get("trace_type") == "symbol"
+    assert d.get("final_action") == "no_trade"
+    assert d.get("no_trade_reason") == "wait_confirmation"
+    t_empty = SymbolDecisionTrace(
+        timestamp="2024-01-01T12:00:00",
+        symbol="QQQ",
+        research_thesis="",
+        opportunity_score=0.5,
+        key_drivers=[],
+        risk_factors=[],
+        final_action="entry",
+    )
+    d2 = t_empty.to_dict()
+    assert "no_trade_reason" not in d2 or d2.get("no_trade_reason") == ""
 
 
 def test_decision_trace_created():

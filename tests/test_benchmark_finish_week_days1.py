@@ -94,3 +94,37 @@ def test_real_mode_days_1_no_mock_fallback():
         assert call_kw["lookback_days"] == 2
         assert call_kw["reject_mock"] is True
         assert result.summary.get("benchmark_source") == "ib"
+
+
+def test_finish_week_no_trade_reasons_in_summary():
+    """UC-10: 当 no_trade_reasons 非空时，decision_traces_summary.summary 应包含未交易原因说明。"""
+    mandate = WeeklyTradingMandate(
+        mandate_id="test_no_trade_reason",
+        capital_limit=10_000.0,
+        benchmark="SPY",
+        duration_trading_days=1,
+        watchlist=["SPY"],
+    )
+    with patch("ai_trading_research_system.services.weekly_finish_service.get_benchmark_return") as m:
+        m.return_value = (0.0, "mock")
+        result = finish_week(
+            mandate=mandate,
+            capital=10_000.0,
+            benchmark="SPY",
+            duration_days=1,
+            total_pnl=0.0,
+            total_trades=0,
+            run_ids=[],
+            key_trades=[],
+            no_trade_reasons=["no_trigger", "wait_confirmation"],
+            daily_research=[],
+            snapshot_source="mock",
+            use_mock=True,
+            state="completed_week",
+            report_dir=Path("."),
+        )
+    dts = result.summary.get("decision_traces_summary") or {}
+    summary_text = dts.get("summary", "")
+    assert "未交易原因" in summary_text
+    assert "wait_confirmation" in summary_text
+    assert "no_trigger" in summary_text
