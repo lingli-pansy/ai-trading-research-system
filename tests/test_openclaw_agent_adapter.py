@@ -11,7 +11,25 @@ from ai_trading_research_system.openclaw.agent_adapter import (
     create_openclaw_agent,
     run_openclaw_agent_once,
     build_openclaw_context_summary,
+    parse_approval_decision,
 )
+
+
+def test_parse_approval_decision() -> None:
+    """自然语言与变体均解析为 approve | reject | defer，默认 fallback defer。"""
+    assert parse_approval_decision("approve") == "approve"
+    assert parse_approval_decision("approved") == "approve"
+    assert parse_approval_decision("yes approve") == "approve"
+    assert parse_approval_decision("decision: approve") == "approve"
+    assert parse_approval_decision("I recommend approving this trade") == "approve"
+    assert parse_approval_decision("reject") == "reject"
+    assert parse_approval_decision("rejected") == "reject"
+    assert parse_approval_decision("decision: reject") == "reject"
+    assert parse_approval_decision("defer") == "defer"
+    assert parse_approval_decision("hold") == "defer"
+    assert parse_approval_decision("wait") == "defer"
+    assert parse_approval_decision("") == "defer"
+    assert parse_approval_decision("unknown text") == "defer"
 
 
 def test_config_from_dict_defaults() -> None:

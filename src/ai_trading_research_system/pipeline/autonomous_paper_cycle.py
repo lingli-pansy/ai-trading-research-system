@@ -40,6 +40,7 @@ from ai_trading_research_system.state.schemas import (
 )
 from ai_trading_research_system.services.benchmark_service import get_benchmark_returns_and_volatility
 from ai_trading_research_system.runtime.proposal import Proposal, ApprovalDecision
+from ai_trading_research_system.openclaw.agent_adapter import parse_approval_decision
 
 
 @dataclass
@@ -923,7 +924,28 @@ def run_autonomous_paper_cycle(
 
         # 4.7) 获取 ApprovalDecision（callback 或 auto-approve）；context 使用 agent_context 供 OpenClaw/LLM 审批
         if input_.approval_callback is not None:
-            decision = input_.approval_callback(proposal, agent_context)
+            callback_result = input_.approval_callback(proposal, agent_context)
+            if isinstance(callback_result, ApprovalDecision):
+                decision = callback_result
+                approval_data = decision.to_dict()
+                approval_data["raw_agent_output"] = getattr(decision, "raw_agent_output", "") or ""
+                approval_data["parsed_decision"] = decision.decision
+            else:
+                raw = (callback_result.get("raw_agent_output") or callback_result.get("decision") or "") if isinstance(callback_result, dict) else ""
+                parsed = parse_approval_decision(str(raw))
+                ts = (callback_result.get("timestamp") or datetime.now(timezone.utc).isoformat()) if isinstance(callback_result, dict) else datetime.now(timezone.utc).isoformat()
+                approval_data = {
+                    "run_id": run_id,
+                    "decision": parsed,
+                    "reviewer": (callback_result.get("reviewer", "") or "openclaw") if isinstance(callback_result, dict) else "openclaw",
+                    "reason": (callback_result.get("reason", "") or "") if isinstance(callback_result, dict) else "",
+                    "timestamp": ts,
+                    "raw_agent_output": raw,
+                    "parsed_decision": parsed,
+                }
+                decision = ApprovalDecision.from_dict(approval_data) or ApprovalDecision(
+                    run_id=run_id, decision="defer", reviewer="openclaw", reason="invalid_decision", timestamp=ts,
+                )
         else:
             decision = ApprovalDecision(
                 run_id=run_id,
@@ -932,7 +954,10 @@ def run_autonomous_paper_cycle(
                 reason="no_callback",
                 timestamp=datetime.now(timezone.utc).isoformat(),
             )
-        store.write_approval_decision(run_id, decision.to_dict())
+            approval_data = decision.to_dict()
+            approval_data["raw_agent_output"] = ""
+            approval_data["parsed_decision"] = decision.decision
+        store.write_approval_decision(run_id, approval_data)
         paths["approval_decision"] = store.path_for_artifact(run_id, "approval_decision")
         audit("approval_decision", {"decision": decision.decision, "reviewer": decision.reviewer})
 

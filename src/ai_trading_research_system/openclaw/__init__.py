@@ -6,6 +6,7 @@ from ai_trading_research_system.openclaw.agent_adapter import (
     build_openclaw_context_summary,
     format_openclaw_run_output,
     approve_proposal,
+    parse_approval_decision,
 )
 
 __all__ = [
@@ -15,4 +16,5 @@ __all__ = [
     "build_openclaw_context_summary",
     "format_openclaw_run_output",
     "approve_proposal",
+    "parse_approval_decision",
 ]

@@ -138,6 +138,9 @@ class AutonomousTradingAgent:
             position_count = len([x for x in (rebalance_plan.get("items") or []) if (x.get("target_position") or 0) > 0])
         risk_flags = getattr(out, "risk_flags", None) or []
         approval_decision = getattr(out, "approval_decision", "") or ""
+        approval_artifact = store.read_approval_decision(run_id)
+        raw_agent_output = (approval_artifact or {}).get("raw_agent_output", "") or ""
+        parsed_decision = (approval_artifact or {}).get("parsed_decision", "") or approval_decision
         agent_context = store.read_artifact(run_id, "agent_context")
         portfolio_summary_for_display: dict[str, Any] = {}
         approval_focus_lines: list[str] = []
@@ -215,6 +218,8 @@ class AutonomousTradingAgent:
             "approval_focus_lines": approval_focus_lines,
             "recommendation": recommendation,
             "recommendation_reasons": recommendation_reasons,
+            "raw_agent_output": raw_agent_output,
+            "parsed_decision": parsed_decision,
         }
 
     def run_loop(
@@ -305,6 +310,11 @@ def format_run_observability(summary: dict[str, Any]) -> str:
         "RECOMMENDATION",
         (summary.get("recommendation") or "defer").lower(),
         *([f"- {r}" for r in (summary.get("recommendation_reasons") or [])[:3]]),
+        "AGENT_DECISION",
+        "RAW_OUTPUT",
+        (summary.get("raw_agent_output") or "(none)")[:200],
+        "PARSED_DECISION",
+        summary.get("parsed_decision") or "(none)",
         "PROPOSAL",
         *([str(x) for x in plan_lines] if plan_lines else ["(no plan)"]),
         "RISK FLAGS",

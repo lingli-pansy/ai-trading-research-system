@@ -5,6 +5,7 @@ OpenClaw agent 作为 proposal approver：approve_proposal(proposal, context) ->
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,27 @@ from ai_trading_research_system.openclaw.config import OpenClawAgentConfig
 from ai_trading_research_system.runtime.proposal import Proposal, ApprovalDecision
 from ai_trading_research_system.state.experience_store import ExperienceStore, get_experience_store
 from ai_trading_research_system.state.run_store import RunStore, get_run_store
+
+
+def parse_approval_decision(text: str) -> str:
+    """
+    从 agent 原始输出解析出规范决策：approve | reject | defer。
+    支持自然语言如 "I recommend approving this trade" -> "approve"。
+    默认 fallback: "defer"。
+    """
+    if not text or not isinstance(text, str):
+        return "defer"
+    t = text.strip().lower()
+    if not t:
+        return "defer"
+    # reject 优先（避免 "approve but reject risk" 被误判为 approve）
+    if re.search(r"\breject(e[d])?\b", t) or "reject" in t:
+        return "reject"
+    if re.search(r"\bapprov(e|ed|ing)?\b", t) or "approve" in t or "approved" in t:
+        return "approve"
+    if re.search(r"\b(defer|hold|wait)\b", t) or "defer" in t or "hold" in t or "wait" in t:
+        return "defer"
+    return "defer"
 
 
 def approve_proposal(
@@ -37,6 +59,13 @@ def approve_proposal(
         out = approver(prop_dict, context)
         if isinstance(out, ApprovalDecision):
             return out
+        if isinstance(out, dict):
+            raw = out.get("raw_agent_output") or out.get("decision") or ""
+            parsed = parse_approval_decision(str(raw))
+            out = dict(out)
+            out["decision"] = parsed
+            out["parsed_decision"] = parsed
+            out["raw_agent_output"] = out.get("raw_agent_output") or raw
         return ApprovalDecision.from_dict(out) or ApprovalDecision(
             run_id=run_id, decision="defer", reviewer="openclaw", reason="invalid_decision", timestamp=ts,
         )
